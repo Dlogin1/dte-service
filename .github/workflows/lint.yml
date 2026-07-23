@@ -1,0 +1,24 @@
+# Verificación de sintaxis PHP en cada push.
+#
+# Por qué: acá no hay PHP local (el desarrollo es en un Mac sin PHP), así que
+# un error de sintaxis solo aparecería al desplegar en Vercel. Esto lo detecta
+# antes, en segundos, y deja el resultado visible en la pestaña Actions.
+name: Lint PHP
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+
+      - name: php -l en todos los archivos
+        run: find api src -name '*.php' -print0 | xargs -0 -n1 php -l
