@@ -1,0 +1,25 @@
+{
+  "name": "clari/dte-service",
+  "description": "Emisión de DTE (SII Chile) para clari.cl — wrapper delgado sobre LibreDTE lib-core.",
+  "license": "AGPL-3.0-or-later",
+  "type": "project",
+  "require": {
+    "php": "^8.5",
+    "libredte/libredte-lib-core": "dev-master"
+  },
+  "autoload": {
+    "psr-4": {
+      "Clari\\DteService\\": "src/"
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true,
+  "config": {
+    "platform": {
+      "ext-gd": "8.5.0"
+    },
+    "platform-check": false,
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}

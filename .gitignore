@@ -1,0 +1,13 @@
+# Dependencias: se instalan en el build de Vercel (composer install).
+# composer.lock SÍ se commitea (congela dev-master a commits exactos).
+vendor/
+
+# Secretos: JAMÁS en el repo — este repo es PÚBLICO (AGPL).
+.env
+.env.*
+*.p12
+*.pfx
+*.pem
+caf*.xml
+
+.DS_Store

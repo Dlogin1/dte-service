@@ -1,0 +1,40 @@
+# Genera composer.lock con PHP 8.5 y lo commitea al repo.
+#
+# Por qué existe: el lib-core nuevo de LibreDTE NO tiene release etiquetado
+# (el último tag, 24.1.1, es la biblioteca antigua para PHP 7.x). Se instala
+# dev-master, y la reproducibilidad del build la da el composer.lock: congela
+# el commit exacto de lib-core y de todas sus dependencias dev-main. Sin lock,
+# cada deploy de Vercel resolvería ramas vivas → un día compila y otro no.
+#
+# Cómo correrlo: GitHub → Actions → «Congelar dependencias» → Run workflow.
+# Correrlo de nuevo SOLO cuando se quiera actualizar LibreDTE a propósito.
+name: Congelar dependencias
+
+on: workflow_dispatch
+
+permissions:
+  contents: write
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: curl, mbstring, soap, gd
+
+      # --no-install: solo resolver y escribir el lock; instalar es cosa de Vercel.
+      - run: composer update --no-install
+
+      - name: Commitear composer.lock
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add composer.lock
+          git diff --cached --quiet && echo "sin cambios" || {
+            git commit -m "build: congelar composer.lock (dev-master → commits exactos)"
+            git push
+          }
