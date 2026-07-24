@@ -85,6 +85,13 @@ final class Sii
      */
     public static function enviarBoleta(string $xmlSobre): string
     {
+        return self::subirXml($xmlSobre, 'envio.xml');
+    }
+
+    /** Subida de un XML (sobre de boletas o libro RVD) al recurso de envío. */
+    private static function subirXml(string $xml, string $nombreArchivo): string
+    {
+        $xmlSobre = $xml;
         $emisor = Emisor::rutPartes();
         [, $envioHost] = self::hosts();
         $url = 'https://' . $envioHost . '/recursos/v1/boleta.electronica.envio';
@@ -100,7 +107,7 @@ final class Sii
             . "--$frontera\r\n"
             . "Content-Disposition: form-data; name=\"dvCompany\"\r\n\r\n{$emisor['dv']}\r\n"
             . "--$frontera\r\n"
-            . "Content-Disposition: form-data; name=\"archivo\"; filename=\"envio.xml\"\r\n"
+            . "Content-Disposition: form-data; name=\"archivo\"; filename=\"$nombreArchivo\"\r\n"
             . "Content-Type: text/xml\r\n\r\n" . $xmlSobre . "\r\n"
             . "--$frontera--\r\n";
 
@@ -117,6 +124,19 @@ final class Sii
         throw new \RuntimeException(
             'El SII no aceptó el envío (HTTP ' . $resp['status'] . '): ' . self::resumen($resp['body'])
         );
+    }
+
+    /**
+     * Envía el Resumen de Ventas Diarias (RVD, ex RCOF) al SII.
+     *
+     * Usa el mismo recurso de envío que las boletas: el SII distingue el tipo
+     * de documento por el contenido del XML (raíz <ConsumoFolios>), no por la
+     * ruta. ⚠️ Confirmar en la certificación: si el SII pide un recurso propio
+     * para el libro, solo hay que cambiar la constante de abajo.
+     */
+    public static function enviarLibroBoletas(string $xmlLibro): string
+    {
+        return self::subirXml($xmlLibro, 'libro.xml');
     }
 
     /**
