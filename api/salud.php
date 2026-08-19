@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+// API JSON: los warnings/deprecaciones de PHP van a los logs de Vercel, nunca al
+// cuerpo de la respuesta (corromperian el JSON). Ver Sii.php (curl_close 8.5).
+ini_set('display_errors', '0');
+
 // Endpoint de salud — el ÚNICO objetivo de la Fase 0 es que esta página
 // responda ok:true en Vercel: eso prueba que LibreDTE compila y carga en el
 // runtime PHP comunitario (riesgo #1, §4.2 del prompt). No expone secretos:

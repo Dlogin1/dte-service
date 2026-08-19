@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+// API JSON: los warnings/deprecaciones de PHP van a los logs de Vercel, nunca al
+// cuerpo de la respuesta (corromperian el JSON). Ver Sii.php (curl_close 8.5).
+ini_set('display_errors', '0');
+
 // Emisión de una boleta electrónica afecta (DTE tipo 39).
 //
 // regsi (Node) manda: folio ya reservado, el CAF, y los datos de la venta.
@@ -23,7 +27,7 @@ use Clari\DteService\Auth;
 use Clari\DteService\Certificado;
 use Clari\DteService\Emisor;
 use Clari\DteService\Sii;
-use libredte\lib\Core\Application;
+use Clari\DteService\Lib;
 use libredte\lib\Core\Package\Billing\Component\Document\Enum\TipoSobre;
 use libredte\lib\Core\Package\Billing\Component\Document\Support\DocumentEnvelope;
 use libredte\lib\Core\Package\Billing\Component\TradingParties\Entity\AutorizacionDte;
@@ -60,7 +64,7 @@ if ($folio < 1 || $cafXml === '' || $monto < 1) {
 }
 
 try {
-    $app = Application::getInstance();
+    $app = Lib::app();
     $billing = $app->getPackageRegistry()->getBillingPackage();
     $biller = $billing->getDocumentComponent();
 

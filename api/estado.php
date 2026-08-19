@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+// API JSON: los warnings/deprecaciones de PHP van a los logs de Vercel, nunca al
+// cuerpo de la respuesta (corromperian el JSON). Ver Sii.php (curl_close 8.5).
+ini_set('display_errors', '0');
+
 // Consulta el estado en el SII de un envío de boletas, por su track ID.
 // La usa el cron de regsi (api/cron/revisar-sii.js) para cerrar el ciclo:
 // enviado → aceptado / aceptado con reparos / rechazado.

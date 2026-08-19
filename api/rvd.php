@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+// API JSON: los warnings/deprecaciones de PHP van a los logs de Vercel, nunca al
+// cuerpo de la respuesta (corromperian el JSON). Ver Sii.php (curl_close 8.5).
+ini_set('display_errors', '0');
+
 // Resumen de Ventas Diarias (RVD) — el reporte diario obligatorio para quien
 // emite boletas electrónicas.
 //
@@ -21,7 +25,7 @@ use Clari\DteService\Auth;
 use Clari\DteService\Certificado;
 use Clari\DteService\Emisor;
 use Clari\DteService\Sii;
-use libredte\lib\Core\Application;
+use Clari\DteService\Lib;
 use libredte\lib\Core\Package\Billing\Component\Book\Enum\TipoLibro;
 use libredte\lib\Core\Package\Billing\Component\Book\Support\BookBag;
 use libredte\lib\Core\Package\Billing\Component\TradingParties\Factory\EmisorFactory;
@@ -80,7 +84,7 @@ try {
         salir(204, ['ok' => true, 'documentos' => 0]);
     }
 
-    $app = Application::getInstance();
+    $app = Lib::app();
     $book = $app->getPackageRegistry()->getBillingPackage()->getBookComponent();
 
     $emisor = (new EmisorFactory())->create([

@@ -65,7 +65,7 @@ final class Sii
         $xml = '<?xml version="1.0" encoding="UTF-8"?>'
              . '<getToken><item><Semilla>' . $semilla . '</Semilla></item></getToken>';
         /** @var SignatureServiceInterface $firmador */
-        $firmador = Application::getInstance()->getService(SignatureServiceInterface::class);
+        $firmador = Lib::app()->getService(SignatureServiceInterface::class);
         $xmlFirmado = $firmador->signXml($xml, Certificado::cargar());
 
         // 3) Canjear la semilla firmada por el token.
@@ -185,7 +185,8 @@ final class Sii
         $body = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);
-        curl_close($ch);
+        // Sin curl_close(): deprecado y sin efecto desde PHP 8.0; en 8.5 emite un
+        // aviso que corrompía la respuesta JSON. El recurso se libera solo.
 
         if ($body === false) {
             throw new \RuntimeException('Error de red hablando con el SII: ' . $err);

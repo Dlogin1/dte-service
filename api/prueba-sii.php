@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+// API JSON: los warnings/deprecaciones de PHP van a los logs de Vercel, nunca al
+// cuerpo de la respuesta (corromperian el JSON). Ver Sii.php (curl_close 8.5).
+ini_set('display_errors', '0');
+
 // Prueba de conectividad + autenticación con el SII, SIN emitir nada.
 //
 // Verifica las dos partes del flujo que NO dependen del CAF ni del set de
