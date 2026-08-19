@@ -47,6 +47,16 @@ try {
     salir(503, ['error' => $e->getMessage()]);
 }
 
+// Modo diagnóstico: ?ver=xml devuelve el XML firmado que se enviaría al SII, sin
+// canjearlo, para inspeccionar el formato de la firma (solo datos públicos).
+if (($_GET['ver'] ?? '') === 'xml') {
+    try {
+        salir(200, ['ambiente' => $ambiente] + Sii::semillaFirmadaDebug());
+    } catch (\Throwable $e) {
+        salir(502, ['ambiente' => $ambiente, 'error' => $e->getMessage()]);
+    }
+}
+
 // Auto-test de firma con una llave DESECHABLE (no el certificado): ¿puede este
 // OpenSSL firmar con SHA1 (lo que exige el SII) y con SHA256? Separa "el entorno
 // no firma SHA1" (política de criptografía) de un problema del certificado.

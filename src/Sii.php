@@ -84,6 +84,35 @@ final class Sii
     }
 
     /**
+     * DIAGNÓSTICO: pide la semilla y devuelve el XML firmado que se enviaría al
+     * SII, SIN canjearlo. Sirve para inspeccionar el formato exacto de la firma
+     * (¿trae <X509Certificate>? ¿con qué namespace/prefijo?) cuando el SII lo
+     * rechaza. Solo datos públicos: semilla efímera + certificado público +
+     * firma; nunca la llave privada. Lo usa /api/prueba-sii?ver=xml.
+     *
+     * @return array{semilla:string,xml_firmado:string}
+     */
+    public static function semillaFirmadaDebug(): array
+    {
+        [$apiHost] = self::hosts();
+        $base = 'https://' . $apiHost . '/recursos/v1';
+
+        $resp = self::curl($base . '/boleta.electronica.semilla', 'GET');
+        if (!preg_match('/<SEMILLA>(\d+)<\/SEMILLA>/', $resp['body'], $m)) {
+            throw new \RuntimeException(
+                'No fue posible obtener la semilla del SII (HTTP ' . $resp['status'] . '): ' . self::preview($resp['body'])
+            );
+        }
+        $semilla = $m[1];
+
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>'
+             . '<getToken><item><Semilla>' . $semilla . '</Semilla></item></getToken>';
+        $xmlFirmado = Lib::firmador()->signXml($xml, Certificado::cargar());
+
+        return ['semilla' => $semilla, 'xml_firmado' => $xmlFirmado];
+    }
+
+    /**
      * Sube el sobre EnvioBOLETA al SII. Devuelve el track ID del envío, que es
      * lo que después se consulta para saber si fue aceptado.
      */
