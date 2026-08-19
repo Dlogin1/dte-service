@@ -65,7 +65,7 @@ final class Sii
         $xml = '<?xml version="1.0" encoding="UTF-8"?>'
              . '<getToken><item><Semilla>' . $semilla . '</Semilla></item></getToken>';
         /** @var SignatureServiceInterface $firmador */
-        $firmador = Lib::app()->getService(SignatureServiceInterface::class);
+        $firmador = Lib::firmador();
         $xmlFirmado = $firmador->signXml($xml, Certificado::cargar());
 
         // 3) Canjear la semilla firmada por el token.
