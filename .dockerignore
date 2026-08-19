@@ -1,0 +1,9 @@
+# vendor/ se instala en el build (composer install), no se copia.
+vendor/
+.git/
+.github/
+*.md
+.env
+.env.*
+*.p12
+*.pfx
