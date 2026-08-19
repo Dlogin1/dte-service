@@ -22,7 +22,7 @@ $salida = [
 // 1) Extensiones que LibreDTE lib-core declara en su composer.json.
 $requeridas = ['curl', 'json', 'mbstring', 'openssl', 'soap'];
 // Las usan sus dependencias de XML/firma. gd se espera AUSENTE en Vercel:
-// por eso el PDF lo genera clari con su pipeline Chrome headless (§4.2).
+// por eso el PDF lo genera regsi con su pipeline Chrome headless (§4.2).
 $deseables = ['dom', 'libxml', 'SimpleXML', 'xsl', 'xmlwriter', 'zip', 'gd'];
 
 $faltanRequeridas = array_values(array_filter($requeridas, fn ($e) => !extension_loaded($e)));
@@ -59,6 +59,45 @@ try {
 
 // 4) ¿Está configurada la autenticación servicio-a-servicio?
 $salida['auth_configurada'] = (getenv('DTE_SERVICE_TOKEN') ?: '') !== '';
+
+// 5) Preparación para emitir (NO expone secretos). Sirve para verificar, antes
+//    de tener la inscripción y el CAF del SII, dos cosas que ya están en tu
+//    mano: que el CERTIFICADO carga bien y que los datos del EMISOR están
+//    puestos. El certificado se prueba con el mismo cargador que usa la emisión
+//    real; solo se muestran datos públicos (titular y vencimiento), nunca la
+//    clave privada.
+$prep = ['emisor' => []];
+foreach (['EMISOR_RUT', 'EMISOR_RAZON_SOCIAL', 'EMISOR_GIRO', 'EMISOR_DIRECCION', 'EMISOR_COMUNA'] as $e) {
+    $prep['emisor'][$e] = (getenv($e) ?: '') !== '';
+}
+if ((getenv('CERT_P12_BASE64') ?: '') === '') {
+    $prep['certificado'] = 'no configurado';
+} elseif (!is_file($autoload)) {
+    $prep['certificado'] = 'no verificable (falta el build de LibreDTE)';
+} else {
+    require_once __DIR__ . '/../src/Certificado.php';
+    try {
+        \Clari\DteService\Certificado::cargar();   // lanza si base64/clave son inválidos
+        $cert = ['carga' => true];
+        // Titular y vencimiento son datos públicos del certificado (aparecen en
+        // cada documento firmado). La clave privada nunca se toca ni se expone.
+        $der = base64_decode((string) getenv('CERT_P12_BASE64'), true);
+        $store = [];
+        if ($der !== false && @openssl_pkcs12_read($der, $store, (string) getenv('CERT_PASS'))) {
+            $x = openssl_x509_parse($store['cert'] ?? '');
+            if (is_array($x)) {
+                $cert['titular'] = $x['subject']['CN'] ?? null;
+                $cert['vence'] = isset($x['validTo_time_t']) ? date('Y-m-d', $x['validTo_time_t']) : null;
+                $cert['vigente'] = isset($x['validTo_time_t']) ? ($x['validTo_time_t'] > time()) : null;
+            }
+        }
+        $prep['certificado'] = $cert;
+    } catch (\Throwable $e) {
+        // Sin el mensaje original: podría filtrar detalles del certificado.
+        $prep['certificado'] = ['carga' => false, 'pista' => 'no se pudo abrir el certificado (.p12/.pfx) — revisa CERT_PASS y que el base64 esté completo. Si es un .pfx exportado en Windows con cifrado antiguo, reexpórtalo con AES.'];
+    }
+}
+$salida['preparacion_dte'] = $prep;
 
 $salida['ok'] = $faltanRequeridas === []
     && isset($salida['libredte']['version'])

@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 // Emisión de una boleta electrónica afecta (DTE tipo 39).
 //
-// clari (Node) manda: folio ya reservado, el CAF, y los datos de la venta.
+// regsi (Node) manda: folio ya reservado, el CAF, y los datos de la venta.
 // Este servicio arma el documento con LibreDTE, lo timbra con el CAF, lo firma
 // con el certificado, construye el sobre EnvioBOLETA y lo sube al SII.
 //
 // Devuelve el XML del documento y el TED (timbre) — NO un PDF: el PDF lo genera
-// clari con su pipeline de Chrome headless, que ya sabe poner QR (§4.2).
+// regsi con su pipeline de Chrome headless, que ya sabe poner QR (§4.2).
 //
 // POST { folio, caf_xml, monto, glosa?, receptor?:{rut,razon_social,direccion,comuna}, fecha? }
 //  200 → { ok, track_id, folio, xml, ted, total }
@@ -53,7 +53,7 @@ if (!is_array($in)) {
 $folio = (int) ($in['folio'] ?? 0);
 $cafXml = (string) ($in['caf_xml'] ?? '');
 $monto = (int) ($in['monto'] ?? 0);          // TOTAL con IVA incluido (boleta)
-$glosa = trim((string) ($in['glosa'] ?? 'Servicio clari'));
+$glosa = trim((string) ($in['glosa'] ?? 'Servicio regsi'));
 
 if ($folio < 1 || $cafXml === '' || $monto < 1) {
     salir(422, ['error' => 'faltan folio, caf_xml o monto']);
@@ -67,7 +67,7 @@ try {
     $certificado = Certificado::cargar();
     $caf = $billing->getIdentifierComponent()->getCafLoaderWorker()->load($cafXml);
 
-    // El folio lo reserva clari (RPC siguiente_folio, atómica en Postgres).
+    // El folio lo reserva regsi (RPC siguiente_folio, atómica en Postgres).
     // Acá solo se comprueba que caiga dentro del rango autorizado del CAF:
     // usar un folio fuera de rango es rechazo seguro del SII.
     if ($folio < $caf->getFolioDesde() || $folio > $caf->getFolioHasta()) {
@@ -141,21 +141,34 @@ try {
     $trackId = Sii::enviarBoleta($xmlSobre);
 
     $xmlDoc = $bolsa->getXmlDocument();
+    $xmlStr = $xmlDoc ? $xmlDoc->saveXml() : null;
+
+    // El TED debe viajar como XML LITERAL, no como estructura: el código de
+    // barras PDF417 de la boleta contiene exactamente esos bytes, y quien lo
+    // escanee revalida la firma sobre ellos. Serializarlo de otra forma (JSON,
+    // por ejemplo) produciría un timbre que no valida.
+    $tedXml = null;
+    if ($xmlStr && preg_match('/<TED[^>]*>.*?<\/TED>/s', $xmlStr, $m)) {
+        $tedXml = $m[0];
+    }
+
     salir(200, [
         'ok' => true,
         'ambiente' => $ambiente,
         'folio' => $folio,
         'track_id' => $trackId,
         'total' => $monto,
-        // XML del documento (no del sobre): es lo que clari archiva y de donde
+        // XML del documento (no del sobre): es lo que regsi archiva y de donde
         // saca los datos para dibujar el PDF.
-        'xml' => $xmlDoc ? $xmlDoc->saveXml() : null,
-        // TED = timbre electrónico, lo que se convierte en el código de barras
-        // PDF417 de la boleta impresa.
+        'xml' => $xmlStr,
+        // Timbre electrónico como XML, listo para el PDF417.
+        'ted_xml' => $tedXml,
+        // La versión estructurada queda disponible por si se necesitan campos
+        // sueltos, pero NO es la que va al código de barras.
         'ted' => $bolsa->getTimbre(),
     ]);
 } catch (\Throwable $e) {
-    // 502: problema hablando con el SII o al construir → clari lo reintenta
+    // 502: problema hablando con el SII o al construir → regsi lo reintenta
     // con backoff (§9) sin invalidar el pago.
     salir(502, ['error' => 'no se pudo emitir', 'detalle' => $e->getMessage()]);
 }

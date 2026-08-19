@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Clari\DteService;
 
 /**
- * Datos tributarios del emisor (Clari SpA), desde variables de entorno.
+ * Datos tributarios del emisor (Aptly Named SpA), desde variables de entorno.
  *
  * Van acá y no en cada petición porque son fijos y son identidad de la empresa:
- * clari (Node) no debería poder cambiarlos por accidente en un request.
+ * regsi (Node) no debería poder cambiarlos por accidente en un request.
  *
  * Fail-closed: si falta cualquiera, no se emite. NO se inventan valores por
  * defecto — el RUT, el giro y el domicilio los define el contador (§13).

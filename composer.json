@@ -1,6 +1,6 @@
 {
-  "name": "clari/dte-service",
-  "description": "Emisión de DTE (SII Chile) para clari.cl — wrapper delgado sobre LibreDTE lib-core.",
+  "name": "regsi/dte-service",
+  "description": "Emisión de DTE (SII Chile) para regsi.cl — wrapper delgado sobre LibreDTE lib-core.",
   "license": "AGPL-3.0-or-later",
   "type": "project",
   "require": {

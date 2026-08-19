@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 // Consulta el estado en el SII de un envío de boletas, por su track ID.
-// La usa el cron de clari (api/cron/revisar-sii.js) para cerrar el ciclo:
+// La usa el cron de regsi (api/cron/revisar-sii.js) para cerrar el ciclo:
 // enviado → aceptado / aceptado con reparos / rechazado.
 //
 // POST { track_id }
@@ -40,7 +40,7 @@ if ($trackId === '') {
 }
 
 /**
- * Traduce el estado del SII al vocabulario de la tabla `dte` de clari.
+ * Traduce el estado del SII al vocabulario de la tabla `dte` de regsi.
  *
  * Códigos del SII para envíos de boletas (los mismos del flujo DTE clásico):
  *   EPR/DOK  → envío procesado, todo correcto.

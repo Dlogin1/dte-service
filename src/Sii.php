@@ -97,7 +97,7 @@ final class Sii
         $url = 'https://' . $envioHost . '/recursos/v1/boleta.electronica.envio';
 
         // multipart/form-data con el archivo XML, como espera el SII.
-        $frontera = '-----clari' . bin2hex(random_bytes(8));
+        $frontera = '-----regsi' . bin2hex(random_bytes(8));
         $cuerpo = "--$frontera\r\n"
             . "Content-Disposition: form-data; name=\"rutSender\"\r\n\r\n{$emisor['rut']}\r\n"
             . "--$frontera\r\n"
@@ -114,7 +114,7 @@ final class Sii
         $resp = self::curl($url, 'POST', $cuerpo, [
             'Content-Type: multipart/form-data; boundary=' . $frontera,
             'Cookie: TOKEN=' . self::token(),
-            'User-Agent: clari/1.0 (+https://clari.cl)',
+            'User-Agent: regsi/1.0 (+https://regsi.cl)',
         ]);
 
         if (preg_match('/<trackid>(\d+)<\/trackid>/i', $resp['body'], $m)) {

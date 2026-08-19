@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Clari\DteService;
 
 /**
- * Autenticación servicio-a-servicio: clari (Node) es el ÚNICO cliente y manda
+ * Autenticación servicio-a-servicio: regsi (Node) es el ÚNICO cliente y manda
  * `Authorization: Bearer <DTE_SERVICE_TOKEN>` (mismo secreto en las env vars
  * de ambos proyectos de Vercel). Comparación en tiempo constante.
  *
