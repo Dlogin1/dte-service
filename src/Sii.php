@@ -68,7 +68,7 @@ final class Sii
              . '<getToken><item><Semilla>' . $semilla . '</Semilla></item></getToken>';
         /** @var SignatureServiceInterface $firmador */
         $firmador = Lib::firmador();
-        $xmlFirmado = $firmador->signXml($xml, Certificado::cargar());
+        $xmlFirmado = self::aplanar($firmador->signXml($xml, Certificado::cargar()));
 
         // 3) Canjear la semilla firmada por el token.
         $resp = self::curl($base . '/boleta.electronica.token', 'POST', $xmlFirmado, [
@@ -107,7 +107,7 @@ final class Sii
 
         $xml = '<?xml version="1.0" encoding="UTF-8"?>'
              . '<getToken><item><Semilla>' . $semilla . '</Semilla></item></getToken>';
-        $xmlFirmado = Lib::firmador()->signXml($xml, Certificado::cargar());
+        $xmlFirmado = self::aplanar(Lib::firmador()->signXml($xml, Certificado::cargar()));
 
         return ['semilla' => $semilla, 'xml_firmado' => $xmlFirmado];
     }
@@ -241,5 +241,23 @@ final class Sii
     private static function preview(string $body): string
     {
         return substr(trim(preg_replace('/\s+/', ' ', $body) ?? ''), 0, 400);
+    }
+
+    /**
+     * Aplana el XML firmado a una sola línea, quitando SÓLO el espaciado entre
+     * tags (`>   <` → `><`). Necesario porque el SII exige el getToken en una
+     * línea: su `getCertificado` se cae con XML indentado ("elemento Certificate
+     * no existe").
+     *
+     * Es SEGURO respecto de la firma: derafu calcula digest y SignatureValue con
+     * C14N() sobre el DOM (que NO tiene nodos de espacios, porque la entrada era
+     * compacta) y sólo `saveXml()` agrega la indentación cosmética al final.
+     * Quitarla devuelve el documento EXACTAMENTE a la forma que se firmó. Los
+     * saltos internos del base64 (X509Certificate, Modulus, SignatureValue) no se
+     * tocan: no están entre `>` y `<`, y son parte de lo que se canonicalizó.
+     */
+    private static function aplanar(string $xml): string
+    {
+        return preg_replace('/>\s+</', '><', trim($xml)) ?? $xml;
     }
 }
