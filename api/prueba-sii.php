@@ -49,7 +49,12 @@ try {
 // OpenSSL firmar con SHA1 (lo que exige el SII) y con SHA256? Separa "el entorno
 // no firma SHA1" (política de criptografía) de un problema del certificado.
 $__conf = getenv('OPENSSL_CONF') ?: null;
-$sha1 = ['openssl' => OPENSSL_VERSION_TEXT, 'openssl_conf' => $__conf, 'conf_existe' => $__conf ? is_file($__conf) : null];
+$sha1 = [
+    'openssl' => OPENSSL_VERSION_TEXT,
+    'openssl_conf' => $__conf,                              // a qué config apunta OpenSSL
+    'conf_existe' => $__conf ? is_file($__conf) : null,
+    'nuestro_cnf' => is_file(__DIR__ . '/../openssl.cnf'),  // ¿se desplegó nuestro archivo?
+];
 $pk = @openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
 if ($pk === false) {
     $sha1['error'] = 'no se pudo generar llave de prueba: ' . openssl_error_string();
