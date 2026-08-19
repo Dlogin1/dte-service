@@ -1,0 +1,35 @@
+# Configuración de OpenSSL para reactivar las firmas SHA1.
+#
+# POR QUÉ: el SII de Chile firma la semilla (y los DTE) con SHA1withRSA. Pero el
+# OpenSSL del entorno de Vercel (Amazon Linux / OpenSSL 3.x) trae la política de
+# criptografía que DESHABILITA las firmas SHA1 por defecto — `openssl_sign(...,
+# OPENSSL_ALGO_SHA1)` falla con "error:03000098 ... invalid digest", incluso con
+# una llave recién generada. Esto no es un problema del certificado.
+#
+# Este archivo reactiva SHA1 para firma. Se activa apuntando la variable de
+# entorno OPENSSL_CONF a él (en Vercel):
+#   OPENSSL_CONF=/var/task/user/openssl.cnf
+#
+# Se mantienen activos los proveedores estándar (default + legacy) para no romper
+# el resto de las operaciones (carga del certificado, TLS al SII, etc.).
+
+config_diagnostics = 1
+openssl_conf = openssl_init
+
+[openssl_init]
+providers = provider_sect
+alg_section = evp_properties
+
+[provider_sect]
+default = default_sect
+legacy = legacy_sect
+
+[default_sect]
+activate = 1
+
+[legacy_sect]
+activate = 1
+
+# La llave del asunto: permitir crear y verificar firmas SHA1.
+[evp_properties]
+rh-allow-sha1-signatures = yes

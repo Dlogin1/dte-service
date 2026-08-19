@@ -45,20 +45,20 @@ try {
     salir(503, ['error' => $e->getMessage()]);
 }
 
-// Auto-test SHA1: ¿este OpenSSL puede firmar con SHA1 EN ABSOLUTO? El SII exige
-// SHA1. Se prueba con una llave DESECHABLE (no el certificado), para separar
-// "el entorno no firma SHA1" de "la llave del certificado tiene un problema".
-$sha1 = ['ok' => false];
+// Auto-test de firma con una llave DESECHABLE (no el certificado): ¿puede este
+// OpenSSL firmar con SHA1 (lo que exige el SII) y con SHA256? Separa "el entorno
+// no firma SHA1" (política de criptografía) de un problema del certificado.
+$__conf = getenv('OPENSSL_CONF') ?: null;
+$sha1 = ['openssl' => OPENSSL_VERSION_TEXT, 'openssl_conf' => $__conf, 'conf_existe' => $__conf ? is_file($__conf) : null];
 $pk = @openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
 if ($pk === false) {
-    $sha1 = ['ok' => false, 'error' => 'no se pudo generar llave de prueba: ' . openssl_error_string()];
+    $sha1['error'] = 'no se pudo generar llave de prueba: ' . openssl_error_string();
 } else {
-    $firma = null;
-    if (@openssl_sign('prueba', $firma, $pk, OPENSSL_ALGO_SHA1)) {
-        $sha1 = ['ok' => true];
-    } else {
-        $sha1 = ['ok' => false, 'error' => openssl_error_string()];
-    }
+    $f = null;
+    $sha1['sha1'] = @openssl_sign('x', $f, $pk, OPENSSL_ALGO_SHA1) ? 'OK' : ('FALLA: ' . openssl_error_string());
+    $f = null;
+    $sha1['sha256'] = @openssl_sign('x', $f, $pk, OPENSSL_ALGO_SHA256) ? 'OK' : ('FALLA: ' . openssl_error_string());
+    $sha1['ok'] = ($sha1['sha1'] === 'OK');
 }
 
 try {
