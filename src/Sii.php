@@ -57,7 +57,9 @@ final class Sii
         // 1) Semilla.
         $resp = self::curl($base . '/boleta.electronica.semilla', 'GET');
         if (!preg_match('/<SEMILLA>(\d+)<\/SEMILLA>/', $resp['body'], $m)) {
-            throw new \RuntimeException('No fue posible obtener la semilla del SII (HTTP ' . $resp['status'] . ').');
+            throw new \RuntimeException(
+                'No fue posible obtener la semilla del SII (HTTP ' . $resp['status'] . '): ' . self::preview($resp['body'])
+            );
         }
         $semilla = $m[1];
 
@@ -73,7 +75,9 @@ final class Sii
             'Content-Type: application/xml',
         ]);
         if (!preg_match('/<TOKEN>(.+?)<\/TOKEN>/', $resp['body'], $m)) {
-            throw new \RuntimeException('No fue posible obtener el token del SII (HTTP ' . $resp['status'] . ').');
+            throw new \RuntimeException(
+                'No fue posible obtener el token del SII (HTTP ' . $resp['status'] . '): ' . self::preview($resp['body'])
+            );
         }
 
         return self::$token = $m[1];
@@ -198,5 +202,15 @@ final class Sii
     private static function resumen(string $body): string
     {
         return substr(trim(preg_replace('/\s+/', ' ', strip_tags($body)) ?? ''), 0, 300);
+    }
+
+    /**
+     * Igual que resumen() pero CONSERVA las etiquetas: para diagnosticar el
+     * formato exacto de la respuesta (¿XML clásico? ¿JSON? ¿código de ESTADO?)
+     * cuando el parseo esperado no calza.
+     */
+    private static function preview(string $body): string
+    {
+        return substr(trim(preg_replace('/\s+/', ' ', $body) ?? ''), 0, 400);
     }
 }
