@@ -45,13 +45,29 @@ try {
     salir(503, ['error' => $e->getMessage()]);
 }
 
+// Auto-test SHA1: ¿este OpenSSL puede firmar con SHA1 EN ABSOLUTO? El SII exige
+// SHA1. Se prueba con una llave DESECHABLE (no el certificado), para separar
+// "el entorno no firma SHA1" de "la llave del certificado tiene un problema".
+$sha1 = ['ok' => false];
+$pk = @openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+if ($pk === false) {
+    $sha1 = ['ok' => false, 'error' => 'no se pudo generar llave de prueba: ' . openssl_error_string()];
+} else {
+    $firma = null;
+    if (@openssl_sign('prueba', $firma, $pk, OPENSSL_ALGO_SHA1)) {
+        $sha1 = ['ok' => true];
+    } else {
+        $sha1 = ['ok' => false, 'error' => openssl_error_string()];
+    }
+}
+
 try {
     // token() hace semilla + firma con el certificado + canje por token.
-    // Si devuelve un token, la red y el certificado funcionan contra el SII.
     $token = Sii::token();
     salir(200, [
         'ok' => true,
         'ambiente' => $ambiente,
+        'sha1_openssl' => $sha1,
         'sii_conexion' => 'OK',
         'sii_autenticacion' => 'OK',
         'token_obtenido' => $token !== '',
@@ -61,10 +77,13 @@ try {
     salir(502, [
         'ok' => false,
         'ambiente' => $ambiente,
+        'sha1_openssl' => $sha1,
         'sii_autenticacion' => 'FALLÓ',
         'detalle' => $e->getMessage(),
-        'nota' => 'Si el mensaje habla de RUT no autorizado/habilitado, es esperable: '
-                . 'falta inscribir al emisor en el ambiente de certificación de boletas '
-                . '(paso 2.1 del checklist). Si es un error de red o de firma, revísalo.',
+        'nota' => 'Diagnóstico: si sha1_openssl.ok=false → el OpenSSL del servidor no '
+                . 'firma con SHA1 (problema de entorno). Si sha1_openssl.ok=true pero el '
+                . 'detalle dice "invalid digest" → el problema es la llave del certificado: '
+                . 'hay que reexportar el .pfx forzando RSA clásico. Si habla de RUT no '
+                . 'habilitado → falta la inscripción en el SII (paso 2.1).',
     ]);
 }
