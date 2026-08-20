@@ -124,7 +124,11 @@ final class Sii
     /** Subida de un XML (sobre de boletas o libro RVD) al recurso de envío. */
     private static function subirXml(string $xml, string $nombreArchivo): string
     {
-        $xmlSobre = $xml;
+        // Mismo aplanado que la semilla: LibreDTE serializa el sobre con
+        // saveXml() (indentado), pero las firmas del DTE se calcularon con C14N
+        // sobre el DOM compacto. Sin aplanar, el SII recalcula los digests sobre
+        // el XML indentado y rechaza la firma. Ver aplanar().
+        $xmlSobre = self::aplanar($xml);
         $emisor = Emisor::rutPartes();
         [, $envioHost] = self::hosts();
         $url = 'https://' . $envioHost . '/recursos/v1/boleta.electronica.envio';
