@@ -30,8 +30,21 @@ COPY . /app
 # pero que este servicio no usa en runtime (gd, y las opcionales de dev). Las que
 # SÍ se usan se instalan arriba con docker-php-ext-install.
 ENV COMPOSER_ALLOW_SUPERUSER=1
-RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader \
-        --ignore-platform-reqs
+ENV COMPOSER_PROCESS_TIMEOUT=0
+
+# Con dev-master + las deps dev-main de derafu, composer clona muchos repos de
+# GitHub. En un build SIN caché eso puede chocar con el rate limit de GitHub
+# (sin token) y fallar (exit 100). Si Render tiene la env GITHUB_TOKEN, se usa
+# (sube el límite de 60/h a 5000/h). Y se reintenta hasta 3 veces por si el fallo
+# es transitorio de red. --no-progress para logs más limpios.
+ARG GITHUB_TOKEN=""
+RUN if [ -n "$GITHUB_TOKEN" ]; then composer config -g github-oauth.github.com "$GITHUB_TOKEN"; fi \
+    && for i in 1 2 3; do \
+         composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader \
+           --ignore-platform-reqs --no-progress && break; \
+         echo ">> composer install falló (intento $i/3); reintento en 15s..."; sleep 15; \
+       done \
+    && test -f vendor/autoload.php
 
 # Render (y la mayoría) inyecta el puerto por la variable $PORT. El servidor
 # embebido de PHP + router.php replican el ruteo por archivos de Vercel:
