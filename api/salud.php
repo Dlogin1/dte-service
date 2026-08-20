@@ -16,6 +16,13 @@ header('Content-Type: application/json; charset=utf-8');
 // Carga directa (no vía composer): así el guard de ambiente se reporta
 // incluso si el build de composer falló y no hay vendor/autoload.php.
 require_once __DIR__ . '/../src/Ambiente.php';
+require_once __DIR__ . '/../src/Auth.php';
+
+// El health es PÚBLICO (lo usan monitores de uptime), pero el nombre del titular
+// del certificado (PII del representante legal) y el commit exacto de la
+// dependencia (huella de software) solo se muestran a quien trae el token. Sin
+// token, esos campos se omiten. tieneToken() NO corta la ejecución.
+$autenticado = \Clari\DteService\Auth::tieneToken();
 
 $salida = [
     'ok' => false,
@@ -44,10 +51,11 @@ if (!is_file($autoload)) {
     try {
         $salida['libredte'] = [
             'version' => \Composer\InstalledVersions::getPrettyVersion('libredte/libredte-lib-core'),
-            // El commit exacto instalado: con composer.lock commiteado este
-            // valor es reproducible entre deploys (§4.2, riesgo #2).
-            'commit' => substr((string) \Composer\InstalledVersions::getReference('libredte/libredte-lib-core'), 0, 12),
         ];
+        // El commit exacto es huella de software (útil para buscar CVEs): solo con token.
+        if ($autenticado) {
+            $salida['libredte']['commit'] = substr((string) \Composer\InstalledVersions::getReference('libredte/libredte-lib-core'), 0, 12);
+        }
     } catch (\Throwable $e) {
         $salida['libredte'] = ['error' => $e->getMessage()];
     }
@@ -83,16 +91,20 @@ if ((getenv('CERT_P12_BASE64') ?: '') === '') {
     try {
         \Clari\DteService\Certificado::cargar();   // lanza si base64/clave son inválidos
         $cert = ['carga' => true];
-        // Titular y vencimiento son datos públicos del certificado (aparecen en
-        // cada documento firmado). La clave privada nunca se toca ni se expone.
-        $der = base64_decode((string) getenv('CERT_P12_BASE64'), true);
-        $store = [];
-        if ($der !== false && @openssl_pkcs12_read($der, $store, (string) getenv('CERT_PASS'))) {
-            $x = openssl_x509_parse($store['cert'] ?? '');
-            if (is_array($x)) {
-                $cert['titular'] = $x['subject']['CN'] ?? null;
-                $cert['vence'] = isset($x['validTo_time_t']) ? date('Y-m-d', $x['validTo_time_t']) : null;
-                $cert['vigente'] = isset($x['validTo_time_t']) ? ($x['validTo_time_t'] > time()) : null;
+        // El TITULAR (CN = nombre del representante legal) es PII y NO se expone
+        // sin token; el vencimiento tampoco. Solo se decodifica y parsea el cert
+        // si la petición está autenticada (además evita el trabajo de CPU en cada
+        // GET público). `carga:true` ya confirma que el certificado abre bien.
+        if ($autenticado) {
+            $der = base64_decode((string) getenv('CERT_P12_BASE64'), true);
+            $store = [];
+            if ($der !== false && @openssl_pkcs12_read($der, $store, (string) getenv('CERT_PASS'))) {
+                $x = openssl_x509_parse($store['cert'] ?? '');
+                if (is_array($x)) {
+                    $cert['titular'] = $x['subject']['CN'] ?? null;
+                    $cert['vence'] = isset($x['validTo_time_t']) ? date('Y-m-d', $x['validTo_time_t']) : null;
+                    $cert['vigente'] = isset($x['validTo_time_t']) ? ($x['validTo_time_t'] > time()) : null;
+                }
             }
         }
         $prep['certificado'] = $cert;

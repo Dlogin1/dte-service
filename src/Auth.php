@@ -16,14 +16,26 @@ final class Auth
 {
     public static function exigirToken(): void
     {
-        $esperado = getenv('DTE_SERVICE_TOKEN') ?: '';
-        $recibido = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-
-        if ($esperado === '' || !hash_equals('Bearer ' . $esperado, $recibido)) {
+        if (!self::tieneToken()) {
             http_response_code(401);
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['error' => 'no autorizado']);
             exit;
         }
+    }
+
+    /**
+     * Chequeo SUAVE: ¿la petición trae el token válido? Devuelve bool sin cortar
+     * la ejecución. Lo usa /api/salud para decidir cuánto detalle mostrar: el
+     * health público va sin token; los datos del certificado (nombre del titular)
+     * y el commit de la dependencia solo se muestran a quien presenta el token.
+     * Misma comparación en tiempo constante y fail-closed que exigirToken().
+     */
+    public static function tieneToken(): bool
+    {
+        $esperado = getenv('DTE_SERVICE_TOKEN') ?: '';
+        $recibido = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+
+        return $esperado !== '' && hash_equals('Bearer ' . $esperado, $recibido);
     }
 }

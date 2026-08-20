@@ -7,3 +7,5 @@ vendor/
 .env.*
 *.p12
 *.pfx
+*.pem
+caf*.xml

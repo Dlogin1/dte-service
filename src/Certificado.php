@@ -39,10 +39,16 @@ final class Certificado
             throw new \RuntimeException('CERT_P12_BASE64 no es base64 válido.');
         }
 
-        // loadFromData lanza CertificateException si la clave es incorrecta.
-        // No incluimos el mensaje original en respuestas al cliente: podría
-        // filtrar detalles del certificado.
-        self::$cache = (new CertificateLoader())->loadFromData($p12, (string) $pass);
+        // loadFromData lanza CertificateException si la clave es incorrecta. Su
+        // mensaje ("mac verify failure", etc.) NO debe llegar al cliente ni a
+        // otros catch que devuelven $e->getMessage(): se envuelve en una
+        // excepción propia con texto genérico. El original va al log del servidor.
+        try {
+            self::$cache = (new CertificateLoader())->loadFromData($p12, (string) $pass);
+        } catch (\Throwable $e) {
+            error_log('Certificado::cargar loadFromData: ' . $e->getMessage());
+            throw new \RuntimeException('No se pudo abrir el certificado (.p12): revisa CERT_PASS y el base64.');
+        }
 
         return self::$cache;
     }
