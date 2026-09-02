@@ -161,42 +161,38 @@ try {
         salir(422, ['error' => 'la firma del documento no valida']);
     }
 
-    // 3) Sobre EnvioBOLETA (las boletas usan su propio tipo de sobre).
-    $bolsa->getEmisor()->setAutorizacionDte(
-        new AutorizacionDte(Emisor::fechaResolucion(), Emisor::numeroResolucion())
-    );
-    // No se fija el tipo de sobre a mano: addDocument() lo deduce del tipo de
-    // documento (el 39 mapea a ENVIO_BOLETA) y rechaza mezclas incompatibles.
-    $sobre = new DocumentEnvelope();
-    $sobre->addDocument($bolsa);
-    $sobre->setCertificate($certificado);
-    if ($sobre->getTipoSobre() !== TipoSobre::ENVIO_BOLETA) {
-        salir(422, ['error' => 'el documento no corresponde a un sobre de boletas']);
-    }
+    // 3) DTE STANDALONE: se toma el documento de la bolsa, se RE-TIMBRA (FRMT
+    //    con la clave del CAF) y se RE-FIRMA (xmldsig estándar), porque las
+    //    firmas/timbre de LibreDTE dev-master no validan contra el SII
+    //    (505 Firma DTE Incorrecta / RFR, comprobado). Ver src/Refirmador.php.
+    $dteXml = $bolsa->getXmlDocument()->setEncoding('ISO-8859-1')->saveXml();
+    $dteFirmado = \Clari\DteService\Refirmador::firmarDte($dteXml, $certificado, $cafXml);
 
-    $despachador = $biller->getDispatcherWorker();
-    $despachador->normalize($sobre);
-    $despachador->validateSchema($sobre);
-
-    // El SII exige ISO-8859-1 en los XML de DTE.
-    $xmlSobre = $sobre->getXmlDocument()->setEncoding('ISO-8859-1')->saveXml();
-
-    // La CARÁTULA del sobre va dirigida AL SII (RUT 60803000-K), no al receptor
-    // del documento: LibreDTE copia ahí el RUT del receptor del DTE (66666666-6)
-    // y el SII rechaza con "RUT Receptor (Caratula) Invalido". Solo la primera
-    // ocurrencia (la carátula va antes que los DTE; el <RUTRecep> del documento
-    // es otra etiqueta y no se toca).
-    $xmlSobre = (string) preg_replace(
-        '~<RutReceptor>[^<]*</RutReceptor>~',
-        '<RutReceptor>60803000-K</RutReceptor>',
-        $xmlSobre,
-        1
-    );
-
-    // Re-firmar con criptografía estándar: las firmas de LibreDTE dev-master no
-    // validan contra el SII (RFR); ver src/Refirmador.php. Después de esto el
-    // XML NO se puede modificar (ni reformatear) o la firma se invalida.
-    $xmlSobre = \Clari\DteService\Refirmador::refirmar($xmlSobre, $certificado, $cafXml);
+    // 4) Sobre EnvioBOLETA por TEMPLATE, no por el DocumentEnvelope de la
+    //    librería: su normalizador ponía el receptor del DTE en la carátula
+    //    (rechazo "RUT Receptor Caratula Invalido") y mover nodos entre
+    //    documentos con DOM corrompía los namespaces. El DTE ya firmado entra
+    //    como STRING LITERAL (sus bytes no se tocan más), y la carátula va
+    //    dirigida al SII (60803000-K), que es a quien se le envía el sobre.
+    $emisorRut = Emisor::datos()['RUTEmisor'];
+    $rutEnvia = strtoupper($certificado->getId());
+    $caratula = '<Caratula version="1.0">'
+        . '<RutEmisor>' . $emisorRut . '</RutEmisor>'
+        . '<RutEnvia>' . $rutEnvia . '</RutEnvia>'
+        . '<RutReceptor>60803000-K</RutReceptor>'
+        . '<FchResol>' . Emisor::fechaResolucion() . '</FchResol>'
+        . '<NroResol>' . Emisor::numeroResolucion() . '</NroResol>'
+        . '<TmstFirmaEnv>' . date('Y-m-d\TH:i:s') . '</TmstFirmaEnv>'
+        . '<SubTotDTE><TpoDTE>39</TpoDTE><NroDTE>1</NroDTE></SubTotDTE>'
+        . '</Caratula>';
+    $xmlSobre = '<?xml version="1.0" encoding="ISO-8859-1"?>' . "\n"
+        . '<EnvioBOLETA xmlns="http://www.sii.cl/SiiDte"'
+        . ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
+        . ' xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd" version="1.0">'
+        . '<SetDTE ID="SetDoc">' . $caratula . $dteFirmado . '</SetDTE>'
+        . \Clari\DteService\Refirmador::esqueletoFirma($certificado, 'SetDoc')
+        . '</EnvioBOLETA>';
+    $xmlSobre = \Clari\DteService\Refirmador::firmarSobre($xmlSobre, $certificado);
 
     // MODO DEBUG (diagnóstico del rechazo del gateway): devuelve el sobre EXACTO
     // que se subiría, aplanado igual que en el envío real, SIN llamar al SII.
