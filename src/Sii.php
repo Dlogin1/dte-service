@@ -34,6 +34,10 @@ final class Sii
         Ambiente::PRODUCCION => ['api.sii.cl', 'rahue.sii.cl'],
     ];
 
+    // User-Agent CANÓNICO que exige la API del SII (su gateway valida el patrón
+    // "Mozilla/4.0 (compatible; PROG 1.0..."). No inventar variantes.
+    private const USER_AGENT = 'Mozilla/4.0 (compatible; PROG 1.0; regsi)';
+
     private static ?string $token = null;
 
     private static function hosts(): array
@@ -158,9 +162,12 @@ final class Sii
         $resp = self::curl($url, 'POST', $cuerpo, [
             'Content-Type: multipart/form-data; boundary=' . $frontera,
             'Cookie: TOKEN=' . self::token(),
-            // El SII históricamente exige un User-Agent formato Mozilla/4.0
-            // (compatible; ...) en las subidas; otros formatos dan rechazos raros.
-            'User-Agent: Mozilla/4.0 (compatible; regsi 1.0; +https://regsi.cl)',
+            // La API del SII exige en TODA llamada autenticada (fuera de semilla/
+            // token): accept application/json + este User-Agent CANÓNICO. Su
+            // gateway valida el patrón "Mozilla/4.0 (compatible; PROG 1.0..." y
+            // sin él (o sin el accept) responde 401 NO ESTA AUTENTICADO.
+            'User-Agent: ' . self::USER_AGENT,
+            'accept: application/json',
         ]);
 
         if (preg_match('/<trackid>(\d+)<\/trackid>/i', $resp['body'], $m)) {
@@ -201,7 +208,8 @@ final class Sii
 
         $resp = self::curl($url, 'GET', null, [
             'Cookie: TOKEN=' . self::token(),
-            'Accept: application/json',
+            'User-Agent: ' . self::USER_AGENT,
+            'accept: application/json',
         ]);
 
         $j = json_decode($resp['body'], true);
