@@ -181,6 +181,11 @@ try {
     // El SII exige ISO-8859-1 en los XML de DTE.
     $xmlSobre = $sobre->getXmlDocument()->setEncoding('ISO-8859-1')->saveXml();
 
+    // Re-firmar con criptografía estándar: las firmas de LibreDTE dev-master no
+    // validan contra el SII (RFR); ver src/Refirmador.php. Después de esto el
+    // XML NO se puede modificar (ni reformatear) o la firma se invalida.
+    $xmlSobre = \Clari\DteService\Refirmador::refirmar($xmlSobre, $certificado);
+
     // MODO DEBUG (diagnóstico del rechazo del gateway): devuelve el sobre EXACTO
     // que se subiría, aplanado igual que en el envío real, SIN llamar al SII.
     // Permite inspeccionar raíz/namespace/encoding y validar contra el XSD
