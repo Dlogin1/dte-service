@@ -204,8 +204,11 @@ final class Sii
     {
         $emisor = Emisor::rutPartes();
         [$apiHost] = self::hosts();
+        // Formato del recurso: /{rut}-{dv}-{trackid} (guiones, SIN sufijo
+        // /estado). Lo confirma el propio SII: al reenviar un sobre duplicado
+        // responde 405 con "X-Location: .../boleta.electronica.envio/78492726-1-32084825".
         $url = sprintf(
-            'https://%s/recursos/v1/boleta.electronica.envio/%d-%s/%s/estado',
+            'https://%s/recursos/v1/boleta.electronica.envio/%d-%s-%s',
             $apiHost, $emisor['rut'], $emisor['dv'], rawurlencode($trackId)
         );
 
