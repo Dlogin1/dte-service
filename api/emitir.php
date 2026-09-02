@@ -232,6 +232,15 @@ try {
         }
     }
 
+    // json_encode FALLA (cuerpo vacío) si algún string trae bytes no-UTF-8
+    // (los XML pueden venir en ISO-8859-1). Se normaliza antes de responder.
+    $aUtf8 = static function (?string $s): ?string {
+        if ($s === null || mb_check_encoding($s, 'UTF-8')) {
+            return $s;
+        }
+        return mb_convert_encoding($s, 'UTF-8', 'ISO-8859-1');
+    };
+
     salir(200, [
         'ok' => true,
         'ambiente' => $ambiente,
@@ -241,12 +250,9 @@ try {
         'totales' => $totales,
         // XML del documento (no del sobre): es lo que regsi archiva y de donde
         // saca los datos para dibujar el PDF.
-        'xml' => $xmlStr,
+        'xml' => $aUtf8($xmlStr),
         // Timbre electrónico como XML, listo para el PDF417.
-        'ted_xml' => $tedXml,
-        // La versión estructurada queda disponible por si se necesitan campos
-        // sueltos, pero NO es la que va al código de barras.
-        'ted' => $bolsa->getTimbre(),
+        'ted_xml' => $aUtf8($tedXml),
     ]);
 } catch (\Throwable $e) {
     // 502: problema hablando con el SII o al construir → regsi lo reintenta
