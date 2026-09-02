@@ -123,4 +123,32 @@ final class Refirmador
     {
         return "'" . str_replace("'", "''", $s) . "'";
     }
+
+    /**
+     * DIAGNÓSTICO: los bytes EXACTOS que este PHP produce al canonicalizar cada
+     * nodo referenciado por las firmas (los mismos que se digestean). Permite
+     * comparar byte a byte contra un C14N de referencia (lxml) desde afuera.
+     * Solo datos ya presentes en el sobre; nada sensible.
+     *
+     * @return array<string,string> id => base64(C14N del nodo)
+     */
+    public static function c14nReferencias(string $xml): array
+    {
+        $doc = new \DOMDocument();
+        $doc->preserveWhiteSpace = true;
+        $doc->formatOutput = false;
+        $doc->loadXML($xml);
+        $xp = new \DOMXPath($doc);
+        $xp->registerNamespace('ds', 'http://www.w3.org/2000/09/xmldsig#');
+
+        $salida = [];
+        foreach ($xp->query('//ds:Signature/ds:SignedInfo/ds:Reference') as $ref) {
+            $id = ltrim($ref->getAttribute('URI'), '#');
+            $nodo = $xp->query('//*[@ID=' . self::xq($id) . ']')->item(0);
+            if ($nodo instanceof \DOMElement) {
+                $salida[$id] = base64_encode($nodo->C14N(false, false));
+            }
+        }
+        return $salida;
+    }
 }

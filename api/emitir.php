@@ -201,6 +201,9 @@ try {
             // Tal cual se envía: formateado por LibreDTE (el SII rechaza el
             // sobre aplanado con SCH-00001; ver Sii::subirXml).
             'sobre_b64' => base64_encode($xmlSobre),
+            // Bytes exactos que ESTE PHP canonicaliza y digestea por firma:
+            // para diffear contra un C14N de referencia desde afuera.
+            'c14n_b64' => \Clari\DteService\Refirmador::c14nReferencias($xmlSobre),
         ]);
     }
 
