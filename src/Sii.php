@@ -128,11 +128,12 @@ final class Sii
     /** Subida de un XML (sobre de boletas o libro RVD) al recurso de envío. */
     private static function subirXml(string $xml, string $nombreArchivo): string
     {
-        // Mismo aplanado que la semilla: LibreDTE serializa el sobre con
-        // saveXml() (indentado), pero las firmas del DTE se calcularon con C14N
-        // sobre el DOM compacto. Sin aplanar, el SII recalcula los digests sobre
-        // el XML indentado y rechaza la firma. Ver aplanar().
-        $xmlSobre = self::aplanar($xml);
+        // OJO: el sobre va TAL CUAL lo serializa LibreDTE (formateado). NO se
+        // aplana: el gateway del SII rechaza sobres en una sola línea con
+        // SCH-00001 "Invalid Schema Name" (probado empíricamente: el mismo sobre
+        // aplanado → SCH-00001; formateado → trackid). El aplanado solo aplica a
+        // la SEMILLA del getToken, donde sí es obligatorio (ESTADO 11 sin él).
+        $xmlSobre = $xml;
         $emisor = Emisor::rutPartes();
 
         // rutSender = RUT del CERTIFICADO (la persona autenticada que obtuvo el
@@ -144,28 +145,23 @@ final class Sii
         [, $envioHost] = self::hosts();
         $url = 'https://' . $envioHost . '/recursos/v1/boleta.electronica.envio';
 
-        // multipart/form-data con el archivo XML, como espera el SII.
-        $frontera = '-----regsi' . bin2hex(random_bytes(8));
-        $cuerpo = "--$frontera\r\n"
-            . "Content-Disposition: form-data; name=\"rutSender\"\r\n\r\n{$sender['rut']}\r\n"
-            . "--$frontera\r\n"
-            . "Content-Disposition: form-data; name=\"dvSender\"\r\n\r\n{$sender['dv']}\r\n"
-            . "--$frontera\r\n"
-            . "Content-Disposition: form-data; name=\"rutCompany\"\r\n\r\n{$emisor['rut']}\r\n"
-            . "--$frontera\r\n"
-            . "Content-Disposition: form-data; name=\"dvCompany\"\r\n\r\n{$emisor['dv']}\r\n"
-            . "--$frontera\r\n"
-            . "Content-Disposition: form-data; name=\"archivo\"; filename=\"$nombreArchivo\"\r\n"
-            . "Content-Type: text/xml\r\n\r\n" . $xmlSobre . "\r\n"
-            . "--$frontera--\r\n";
+        // multipart/form-data NATIVO de curl (mismo formato que el curl -F con el
+        // que se validó el flujo). CURLStringFile evita archivo temporal.
+        $cuerpo = [
+            'rutSender' => (string) $sender['rut'],
+            'dvSender' => $sender['dv'],
+            'rutCompany' => (string) $emisor['rut'],
+            'dvCompany' => $emisor['dv'],
+            'archivo' => new \CURLStringFile($xmlSobre, $nombreArchivo, 'text/xml'),
+        ];
 
         $resp = self::curl($url, 'POST', $cuerpo, [
-            'Content-Type: multipart/form-data; boundary=' . $frontera,
             'Cookie: TOKEN=' . self::token(),
             // La API del SII exige en TODA llamada autenticada (fuera de semilla/
             // token): accept application/json + este User-Agent CANÓNICO. Su
             // gateway valida el patrón "Mozilla/4.0 (compatible; PROG 1.0..." y
             // sin él (o sin el accept) responde 401 NO ESTA AUTENTICADO.
+            // El Content-Type multipart (con boundary) lo pone curl solo.
             'User-Agent: ' . self::USER_AGENT,
             'accept: application/json',
         ]);
@@ -223,7 +219,8 @@ final class Sii
         return ['estado' => '', 'glosa' => self::resumen($resp['body']), 'crudo' => $resp['body']];
     }
 
-    private static function curl(string $url, string $metodo, ?string $cuerpo = null, array $headers = []): array
+    /** @param string|array|null $cuerpo string = cuerpo crudo; array = multipart nativo de curl */
+    private static function curl(string $url, string $metodo, string|array|null $cuerpo = null, array $headers = []): array
     {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
@@ -282,10 +279,4 @@ final class Sii
         return preg_replace('/>\s+</', '><', trim($xml)) ?? $xml;
     }
 
-    /** Expone el aplanado para el modo debug de emitir.php (mismo tratamiento
-     *  que recibe el sobre real antes de subirse). */
-    public static function aplanarPublico(string $xml): string
-    {
-        return self::aplanar($xml);
-    }
 }

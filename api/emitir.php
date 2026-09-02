@@ -193,7 +193,9 @@ try {
             'ok' => true,
             'debug' => 'sobre NO enviado al SII',
             'folio' => $folio,
-            'sobre_b64' => base64_encode(Sii::aplanarPublico($xmlSobre)),
+            // Tal cual se envía: formateado por LibreDTE (el SII rechaza el
+            // sobre aplanado con SCH-00001; ver Sii::subirXml).
+            'sobre_b64' => base64_encode($xmlSobre),
         ]);
     }
 
