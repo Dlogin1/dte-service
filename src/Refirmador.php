@@ -34,7 +34,7 @@ final class Refirmador
      */
     public static function firmarDte(string $dteXml, CertificateInterface $cert, string $cafXml): string
     {
-        $doc = self::cargar($dteXml);
+        $doc = self::cargar($dteXml, 'dte');
         $xp = self::xpath($doc);
 
         // 1) Re-timbrar: FRMT = firma del <DD> literal con la clave del CAF.
@@ -71,7 +71,7 @@ final class Refirmador
     /** Firma EN SITU la firma raíz del sobre (Reference al SetDTE). */
     public static function firmarSobre(string $sobreXml, CertificateInterface $cert): string
     {
-        $doc = self::cargar($sobreXml);
+        $doc = self::cargar($sobreXml, 'sobre');
         $xp = self::xpath($doc);
         $sig = $xp->query('/*/ds:Signature')->item(0);
         if (!$sig instanceof \DOMElement) {
@@ -121,7 +121,7 @@ final class Refirmador
     {
         $salida = [];
 
-        $doc = self::cargar($sobreXml);
+        $doc = self::cargar($sobreXml, 'debug-sobre');
         $xp = self::xpath($doc);
         foreach ($xp->query('/*/ds:Signature/ds:SignedInfo/ds:Reference') as $ref) {
             $id = ltrim($ref->getAttribute('URI'), '#');
@@ -132,7 +132,7 @@ final class Refirmador
         }
 
         if (preg_match('~<DTE\b.*?</DTE>~s', $sobreXml, $m)) {
-            $d2 = self::cargar($m[0]);
+            $d2 = self::cargar($m[0], 'debug-dte');
             $x2 = self::xpath($d2);
             foreach ($x2->query('//ds:Signature/ds:SignedInfo/ds:Reference') as $ref) {
                 $id = ltrim($ref->getAttribute('URI'), '#');
@@ -190,13 +190,26 @@ final class Refirmador
 
     // ── utilitarios ────────────────────────────────────────────────────────
 
-    private static function cargar(string $xml): \DOMDocument
+    private static function cargar(string $xml, string $quien = ''): \DOMDocument
     {
         $doc = new \DOMDocument();
         $doc->preserveWhiteSpace = true;
         $doc->formatOutput = false;
-        if (!$doc->loadXML($xml)) {
-            throw new \RuntimeException('firma: el XML no parsea');
+        $prev = libxml_use_internal_errors(true);
+        $ok = $doc->loadXML($xml);
+        $errs = libxml_get_errors();
+        libxml_clear_errors();
+        libxml_use_internal_errors($prev);
+        if (!$ok) {
+            $e = $errs[0] ?? null;
+            throw new \RuntimeException(sprintf(
+                'firma%s: el XML no parsea: %s (línea %s) | inicio: %s | largo: %d',
+                $quien !== '' ? " [$quien]" : '',
+                trim((string) ($e->message ?? '?')),
+                (string) ($e->line ?? '?'),
+                substr($xml, 0, 160),
+                strlen($xml)
+            ));
         }
         return $doc;
     }
