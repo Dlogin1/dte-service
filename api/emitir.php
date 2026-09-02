@@ -181,6 +181,18 @@ try {
     // El SII exige ISO-8859-1 en los XML de DTE.
     $xmlSobre = $sobre->getXmlDocument()->setEncoding('ISO-8859-1')->saveXml();
 
+    // La CARÁTULA del sobre va dirigida AL SII (RUT 60803000-K), no al receptor
+    // del documento: LibreDTE copia ahí el RUT del receptor del DTE (66666666-6)
+    // y el SII rechaza con "RUT Receptor (Caratula) Invalido". Solo la primera
+    // ocurrencia (la carátula va antes que los DTE; el <RUTRecep> del documento
+    // es otra etiqueta y no se toca).
+    $xmlSobre = (string) preg_replace(
+        '~<RutReceptor>[^<]*</RutReceptor>~',
+        '<RutReceptor>60803000-K</RutReceptor>',
+        $xmlSobre,
+        1
+    );
+
     // Re-firmar con criptografía estándar: las firmas de LibreDTE dev-master no
     // validan contra el SII (RFR); ver src/Refirmador.php. Después de esto el
     // XML NO se puede modificar (ni reformatear) o la firma se invalida.
