@@ -166,6 +166,13 @@ final class Sii
             'accept: application/json',
         ]);
 
+        // Con accept: application/json el SII responde JSON:
+        //   { "rut_emisor": ..., "trackid": 32084932, "estado": "REC", ... }
+        $j = json_decode($resp['body'], true);
+        if (is_array($j) && !empty($j['trackid'])) {
+            return (string) $j['trackid'];
+        }
+        // Compatibilidad con la variante XML (<trackid>...</trackid>).
         if (preg_match('/<trackid>(\d+)<\/trackid>/i', $resp['body'], $m)) {
             return $m[1];
         }
