@@ -184,11 +184,13 @@ try {
     // oficial en local. Token-protegido como todo el endpoint; no gasta folio en
     // el SII (el folio local reservado se pierde, aceptable en certificación).
     if (!empty($in['debug_sobre'])) {
+        // En base64: el sobre va en ISO-8859-1 y json_encode falla con bytes
+        // no-UTF-8 (devolvía un cuerpo vacío). Base64 preserva los bytes exactos.
         salir(200, [
             'ok' => true,
             'debug' => 'sobre NO enviado al SII',
             'folio' => $folio,
-            'sobre' => Sii::aplanarPublico($xmlSobre),
+            'sobre_b64' => base64_encode(Sii::aplanarPublico($xmlSobre)),
         ]);
     }
 
