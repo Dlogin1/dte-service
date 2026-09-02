@@ -28,6 +28,9 @@ $salida = [
     'ok' => false,
     'servicio' => 'dte-service',
     'php' => PHP_VERSION,
+    // Commit desplegado (lo inyecta Render). El repo es público (AGPL), así que
+    // no filtra nada; permite verificar QUÉ versión está viva antes de probar.
+    'commit_servicio' => substr((string) (getenv('RENDER_GIT_COMMIT') ?: ''), 0, 12) ?: null,
 ];
 
 // 1) Extensiones que LibreDTE lib-core declara en su composer.json.
