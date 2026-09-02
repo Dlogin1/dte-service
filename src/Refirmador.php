@@ -34,6 +34,21 @@ final class Refirmador
      */
     public static function firmarDte(string $dteXml, CertificateInterface $cert, string $cafXml): string
     {
+        // El CAF dentro del DD debe ir BYTE-IDÉNTICO al archivo que emitió el
+        // SII: su <FRMA> es la firma del SII sobre esos bytes exactos, y la
+        // librería lo re-indenta al construir el TED (614B vs 406B) → el SII
+        // reparaba con 510 "Firma Timbre Electrónico Incorrecta". Se reemplaza
+        // por el bloque verbatim ANTES de timbrar, así el FRMT lo cubre.
+        if (preg_match('~<CAF version=.*?</CAF>~s', $cafXml, $mc)) {
+            $verbatim = $mc[0];
+            $dteXml = (string) preg_replace_callback(
+                '~<CAF version=.*?</CAF>~s',
+                static fn () => $verbatim,
+                $dteXml,
+                1
+            );
+        }
+
         $doc = self::cargar($dteXml, 'dte');
         $xp = self::xpath($doc);
 
