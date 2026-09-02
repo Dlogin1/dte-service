@@ -281,4 +281,11 @@ final class Sii
     {
         return preg_replace('/>\s+</', '><', trim($xml)) ?? $xml;
     }
+
+    /** Expone el aplanado para el modo debug de emitir.php (mismo tratamiento
+     *  que recibe el sobre real antes de subirse). */
+    public static function aplanarPublico(string $xml): string
+    {
+        return self::aplanar($xml);
+    }
 }

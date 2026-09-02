@@ -178,6 +178,20 @@ try {
     // El SII exige ISO-8859-1 en los XML de DTE.
     $xmlSobre = $sobre->getXmlDocument()->setEncoding('ISO-8859-1')->saveXml();
 
+    // MODO DEBUG (diagnóstico del rechazo del gateway): devuelve el sobre EXACTO
+    // que se subiría, aplanado igual que en el envío real, SIN llamar al SII.
+    // Permite inspeccionar raíz/namespace/encoding y validar contra el XSD
+    // oficial en local. Token-protegido como todo el endpoint; no gasta folio en
+    // el SII (el folio local reservado se pierde, aceptable en certificación).
+    if (!empty($in['debug_sobre'])) {
+        salir(200, [
+            'ok' => true,
+            'debug' => 'sobre NO enviado al SII',
+            'folio' => $folio,
+            'sobre' => Sii::aplanarPublico($xmlSobre),
+        ]);
+    }
+
     // 4) Subir al SII → track ID.
     $trackId = Sii::enviarBoleta($xmlSobre);
 
