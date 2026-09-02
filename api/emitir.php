@@ -58,9 +58,12 @@ $folio = (int) ($in['folio'] ?? 0);
 $cafXml = (string) ($in['caf_xml'] ?? '');
 $monto = (int) ($in['monto'] ?? 0);          // TOTAL con IVA incluido (boleta)
 $glosa = trim((string) ($in['glosa'] ?? 'Servicio regsi'));
+// Modo multi-ítem (set de pruebas / futura factura): arreglo `detalle`. Si no
+// viene, se usa el modo simple monto+glosa (el flujo de pago real, un ítem).
+$detalleIn = is_array($in['detalle'] ?? null) ? $in['detalle'] : [];
 
-if ($folio < 1 || $cafXml === '' || $monto < 1) {
-    salir(422, ['error' => 'faltan folio, caf_xml o monto']);
+if ($folio < 1 || $cafXml === '' || ($monto < 1 && $detalleIn === [])) {
+    salir(422, ['error' => 'faltan folio, caf_xml y (monto o detalle)']);
 }
 
 try {
@@ -91,8 +94,36 @@ try {
         'CmnaRecep' => (string) ($r['comuna'] ?? 'Santiago'),
     ];
 
-    // En la boleta los precios son BRUTOS (IVA incluido): se manda el total y
-    // LibreDTE calcula neto e IVA al normalizar.
+    // Detalle. En la boleta 39 los precios son BRUTOS (IVA incluido): LibreDTE
+    // calcula neto, IVA y exento al normalizar. Dos modos:
+    //   · multi-ítem: arreglo `detalle` con {nombre, cantidad, precio, exento?,
+    //     unidad?} — para el set de pruebas y facturación futura.
+    //   · simple: un ítem con glosa + monto — el flujo de pago real.
+    if ($detalleIn !== []) {
+        $detalle = [];
+        foreach ($detalleIn as $it) {
+            $linea = [
+                'NmbItem' => trim((string) ($it['nombre'] ?? '')),
+                'QtyItem' => (float) ($it['cantidad'] ?? 1),
+                'PrcItem' => (float) ($it['precio'] ?? 0),
+            ];
+            $u = trim((string) ($it['unidad'] ?? ''));
+            if ($u !== '') {
+                $linea['UnmdItem'] = $u;            // unidad de medida (ej. 'Kg')
+            }
+            if (!empty($it['exento'])) {
+                $linea['IndExe'] = 1;               // ítem exento de IVA
+            }
+            $detalle[] = $linea;
+        }
+    } else {
+        $detalle = [[
+            'NmbItem' => $glosa,
+            'QtyItem' => 1,
+            'PrcItem' => $monto,
+        ]];
+    }
+
     $datos = [
         'Encabezado' => [
             'IdDoc' => [
@@ -103,12 +134,18 @@ try {
             'Emisor' => Emisor::datos(),
             'Receptor' => $receptor,
         ],
-        'Detalle' => [[
-            'NmbItem' => $glosa,
-            'QtyItem' => 1,
-            'PrcItem' => $monto,
-        ]],
+        'Detalle' => $detalle,
     ];
+
+    // Referencia opcional. En el set de pruebas cada boleta referencia su caso:
+    // TpoDocRef='SET', RazonRef='CASO-N'. LibreDTE quita FchRef en boletas.
+    if (is_array($in['referencia'] ?? null) && trim((string) ($in['referencia']['razon'] ?? '')) !== '') {
+        $datos['Referencia'] = [[
+            'TpoDocRef' => trim((string) ($in['referencia']['tipo'] ?? 'SET')),
+            'FolioRef' => (string) ($in['referencia']['folio'] ?? $folio),
+            'RazonRef' => trim((string) $in['referencia']['razon']),
+        ]];
+    }
 
     // 1) Armar, timbrar (CAF) y firmar (certificado) el documento.
     $bolsa = $biller->bill($datos, $caf, $certificado);
@@ -156,12 +193,23 @@ try {
         $tedXml = $m[0];
     }
 
+    // Totales calculados por LibreDTE (del XML normalizado). Se devuelven para
+    // poder VERIFICAR cada caso del set: que el neto/IVA/exento/total cuadren con
+    // lo esperado antes de darlo por bueno (los precios entran BRUTOS).
+    $totales = [];
+    foreach (['MntNeto', 'IVA', 'MntExe', 'MntTotal'] as $campo) {
+        if ($xmlStr && preg_match('/<' . $campo . '>(\d+)<\/' . $campo . '>/', $xmlStr, $mm)) {
+            $totales[$campo] = (int) $mm[1];
+        }
+    }
+
     salir(200, [
         'ok' => true,
         'ambiente' => $ambiente,
         'folio' => $folio,
         'track_id' => $trackId,
-        'total' => $monto,
+        'total' => $totales['MntTotal'] ?? $monto,
+        'totales' => $totales,
         // XML del documento (no del sobre): es lo que regsi archiva y de donde
         // saca los datos para dibujar el PDF.
         'xml' => $xmlStr,
