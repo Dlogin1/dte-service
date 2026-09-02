@@ -130,15 +130,22 @@ final class Sii
         // el XML indentado y rechaza la firma. Ver aplanar().
         $xmlSobre = self::aplanar($xml);
         $emisor = Emisor::rutPartes();
+
+        // rutSender = RUT del CERTIFICADO (la persona autenticada que obtuvo el
+        // token), NO el de la empresa: el SII los cruza y si no calzan responde
+        // 401 "NO ESTA AUTENTICADO". rutCompany sí es la empresa emisora.
+        $certId = strtoupper(Certificado::cargar()->getId());   // ej. 17872544-0
+        $p = strrpos($certId, '-');
+        $sender = ['rut' => substr($certId, 0, (int) $p), 'dv' => substr($certId, $p + 1)];
         [, $envioHost] = self::hosts();
         $url = 'https://' . $envioHost . '/recursos/v1/boleta.electronica.envio';
 
         // multipart/form-data con el archivo XML, como espera el SII.
         $frontera = '-----regsi' . bin2hex(random_bytes(8));
         $cuerpo = "--$frontera\r\n"
-            . "Content-Disposition: form-data; name=\"rutSender\"\r\n\r\n{$emisor['rut']}\r\n"
+            . "Content-Disposition: form-data; name=\"rutSender\"\r\n\r\n{$sender['rut']}\r\n"
             . "--$frontera\r\n"
-            . "Content-Disposition: form-data; name=\"dvSender\"\r\n\r\n{$emisor['dv']}\r\n"
+            . "Content-Disposition: form-data; name=\"dvSender\"\r\n\r\n{$sender['dv']}\r\n"
             . "--$frontera\r\n"
             . "Content-Disposition: form-data; name=\"rutCompany\"\r\n\r\n{$emisor['rut']}\r\n"
             . "--$frontera\r\n"
@@ -151,7 +158,9 @@ final class Sii
         $resp = self::curl($url, 'POST', $cuerpo, [
             'Content-Type: multipart/form-data; boundary=' . $frontera,
             'Cookie: TOKEN=' . self::token(),
-            'User-Agent: regsi/1.0 (+https://regsi.cl)',
+            // El SII históricamente exige un User-Agent formato Mozilla/4.0
+            // (compatible; ...) en las subidas; otros formatos dan rechazos raros.
+            'User-Agent: Mozilla/4.0 (compatible; regsi 1.0; +https://regsi.cl)',
         ]);
 
         if (preg_match('/<trackid>(\d+)<\/trackid>/i', $resp['body'], $m)) {
