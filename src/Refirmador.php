@@ -62,8 +62,14 @@ final class Refirmador
         if (!preg_match('~<DD>.*?</DD>~s', $serial, $mdd)) {
             throw new \RuntimeException('timbre: no hay <DD> en el DTE');
         }
+        // El SII NO verifica el FRMT sobre los bytes recibidos: reconstruye el
+        // DD en su forma CANÓNICA — aplanado, sin espacios entre etiquetas
+        // (los saltos DENTRO de un texto, como los base64, se conservan) — y
+        // verifica contra eso. Igual que LibreDTE v2 (getFlattened). Firmar el
+        // DD literal con el CAF verbatim (que trae saltos) daba reparo 510.
+        $ddCanonico = (string) preg_replace('~>\s+<~', '><', $mdd[0]);
         $firmaTed = '';
-        if (!openssl_sign($mdd[0], $firmaTed, $claveCaf, OPENSSL_ALGO_SHA1)) {
+        if (!openssl_sign($ddCanonico, $firmaTed, $claveCaf, OPENSSL_ALGO_SHA1)) {
             throw new \RuntimeException('timbre: openssl_sign falló: ' . openssl_error_string());
         }
         $frmt = $xp->query('//*[local-name()="TED"]/*[local-name()="FRMT"]')->item(0);
