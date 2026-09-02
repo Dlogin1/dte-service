@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Clari\DteService;
 
+use Derafu\Kernel\Environment;
 use Derafu\Signature\Contract\SignatureGeneratorInterface;
 use Derafu\Signature\Service\SignatureGenerator;
 use Derafu\Xml\Service\XmlDecoder;
@@ -30,16 +31,33 @@ final class Lib
 {
     public static function app(): Application
     {
-        // Entorno POR DEFECTO de LibreDTE — el mismo que usan sus tests, y con el
-        // que el contenedor de dependencias expone bien sus servicios
-        // (getPackageRegistry()->getBillingPackage()->...).
+        // CAUSA RAÍZ del "non-existent service PackageRegistryInterface": el
+        // Environment de derafu/kernel resuelve el project dir como «3 niveles
+        // arriba de vendor/symfony/dependency-injection» — o sea, NUESTRA app
+        // (/app) — y busca la config en /app/config, que no existe. El
+        // services.yaml de LibreDTE (donde PackageRegistry es public) vive en
+        // vendor/libredte/libredte-lib-core/config/. Con el project dir sin
+        // apuntar ahí, el contenedor se compila SIN los servicios del paquete.
+        // (En los tests de LibreDTE funciona porque el project dir ES su repo.)
         //
-        // ANTES se redirigía la caché a /tmp porque en Vercel el disco del deploy
-        // era de SOLO LECTURA. Pero ese Environment custom compilaba el contenedor
-        // de una forma que dejaba PackageRegistryInterface INACCESIBLE ("non-
-        // existent service") y la emisión reventaba. En Render (contenedor Debian)
-        // el disco ES escribible, así que el parche ya no hace falta: default.
-        return Application::getInstance();
+        // Arreglo: fijar 'project' al directorio del paquete LibreDTE (config y
+        // resources cuelgan de ahí) y la caché/log en tmp — escribible y, de
+        // paso, sin arrastrar un contenedor viejo compilado con otra config.
+        $paquete = realpath(
+            \Composer\InstalledVersions::getInstallPath('libredte/libredte-lib-core')
+        );
+        if ($paquete === false) {
+            throw new \RuntimeException('No se encontró el paquete libredte/libredte-lib-core en vendor/.');
+        }
+        $tmp = sys_get_temp_dir() . '/libredte';
+
+        $env = new Environment('dev', true, [], [
+            'project' => $paquete,
+            'cache' => $tmp . '/cache',
+            'log' => $tmp . '/log',
+        ]);
+
+        return Application::getInstance($env);
     }
 
     /**
