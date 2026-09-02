@@ -52,6 +52,35 @@ final class Refirmador
         $doc = self::cargar($dteXml, 'dte');
         $xp = self::xpath($doc);
 
+        // 0) LIMPIAR LOS FIXTURES QUE INYECTA LibreDTE dev-master. Su
+        //    Fake{Emisor,Receptor}Provider rellena campos OPCIONALES con datos de
+        //    fantasía (código de sucursal 123456, teléfono/correo inventados) y
+        //    agrega una Referencia "Email receptor: ...@example.com". regsi NUNCA
+        //    provee esos campos, y el matcher del set de certificación del SII se
+        //    descoloca con ellos. Se eliminan; queda solo la referencia real (el
+        //    CASO) y los datos verdaderos del emisor.
+        //    (Ninguno está dentro del <DD>/TED, así que no afecta el timbre; la
+        //    firma xmldsig se recalcula al final sobre el documento ya limpio.)
+        foreach (iterator_to_array($xp->query(
+            '//*[local-name()="Referencia"][*[local-name()="RazonRef" and starts-with(., "Email receptor")]]'
+        )) as $ref) {
+            $ref->parentNode->removeChild($ref);
+        }
+        foreach (['CdgSIISucur', 'Contacto', 'CorreoRecep', 'CorreoEmisor'] as $tag) {
+            foreach (iterator_to_array($xp->query('//*[local-name()="' . $tag . '"]')) as $el) {
+                $el->parentNode->removeChild($el);
+            }
+        }
+        // Renumerar NroLinRef de las referencias que queden (por si quedó hueco).
+        $n = 0;
+        foreach ($xp->query('//*[local-name()="Referencia"]') as $ref) {
+            $n++;
+            $nl = $xp->query('.//*[local-name()="NroLinRef"]', $ref)->item(0);
+            if ($nl instanceof \DOMElement) {
+                self::texto($doc, $nl, (string) $n);
+            }
+        }
+
         // 1) Re-timbrar: FRMT = firma del <DD> literal con la clave del CAF.
         if (!preg_match('~<RSASK>(.*?)</RSASK>~s', $cafXml, $m)) {
             throw new \RuntimeException('timbre: el CAF no trae RSASK');
@@ -86,7 +115,23 @@ final class Refirmador
         self::recalcular($doc, $xp, $sig, $cert);
 
         $salida = self::iso($doc->saveXML());
+
+        // RED DE SEGURIDAD (fail-closed): nunca dejar salir un DTE con datos de
+        // fantasía de LibreDTE. Si aparece alguno, se aborta la emisión en vez de
+        // enviar basura al SII. Ver la limpieza de fixtures arriba.
+        self::sinFixtures($salida);
+
         return trim((string) preg_replace('~^<\?xml[^>]*\?>\s*~', '', $salida));
+    }
+
+    /** Aborta si el XML contiene marcas conocidas de datos de fantasía de LibreDTE. */
+    private static function sinFixtures(string $xml): void
+    {
+        foreach (['example.com', 'SASCO', 'correo.sii', 'correo.sasco', '32525575', '76192083'] as $sucio) {
+            if (stripos($xml, $sucio) !== false) {
+                throw new \RuntimeException('DTE con dato de fantasía de LibreDTE (' . $sucio . '): emisión abortada');
+            }
+        }
     }
 
     /** Firma EN SITU la firma raíz del sobre (Reference al SetDTE). */
