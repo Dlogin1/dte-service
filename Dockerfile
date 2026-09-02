@@ -44,7 +44,13 @@ RUN if [ -n "$GITHUB_TOKEN" ]; then composer config -g github-oauth.github.com "
            --ignore-platform-reqs --no-progress && break; \
          echo ">> composer install falló (intento $i/3); reintento en 15s..."; sleep 15; \
        done \
-    && test -f vendor/autoload.php
+    && test -f vendor/autoload.php \
+    # El services.yaml de LibreDTE importa "../vendor/derafu/*/config/services.yaml"
+    # con rutas relativas pensadas para cuando LibreDTE es el proyecto RAÍZ (su
+    # vendor/ al lado de su config/). Instalado como dependencia, esa ruta apunta
+    # a vendor/libredte/libredte-lib-core/vendor/, que no existe. El symlink la
+    # hace resolver al vendor real del proyecto.
+    && ln -s /app/vendor /app/vendor/libredte/libredte-lib-core/vendor
 
 # Render (y la mayoría) inyecta el puerto por la variable $PORT. El servidor
 # embebido de PHP + router.php replican el ruteo por archivos de Vercel:
