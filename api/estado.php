@@ -71,14 +71,24 @@ function veredicto(string $estado): string
 
 try {
     $r = Sii::estadoEnvio($trackId);
-    salir(200, [
+    $salida = [
         'ok' => true,
         'ambiente' => $ambiente,
         'track_id' => $trackId,
         'estado' => $r['estado'],
         'glosa' => $r['glosa'],
         'veredicto' => veredicto($r['estado']),
-    ]);
+    ];
+    // ?ver=crudo — diagnóstico: la respuesta completa del SII (puede traer el
+    // detalle de POR QUÉ rechazó: qué firma, qué campo). Token-protegido.
+    if (($_GET['ver'] ?? '') === 'crudo') {
+        $crudo = (string) ($r['crudo'] ?? '');
+        if (!mb_check_encoding($crudo, 'UTF-8')) {
+            $crudo = mb_convert_encoding($crudo, 'UTF-8', 'ISO-8859-1');
+        }
+        $salida['crudo'] = mb_substr($crudo, 0, 4000);
+    }
+    salir(200, $salida);
 } catch (\Throwable $e) {
     salir(502, ['error' => 'no se pudo consultar el SII', 'detalle' => $e->getMessage()]);
 }
