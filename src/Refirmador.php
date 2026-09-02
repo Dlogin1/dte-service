@@ -35,23 +35,40 @@ final class Refirmador
         if (!$doc->loadXML($xml)) {
             throw new \RuntimeException('re-firma: el sobre no parsea');
         }
+        $ds = 'http://www.w3.org/2000/09/xmldsig#';
         $xp = new \DOMXPath($doc);
-        $xp->registerNamespace('ds', 'http://www.w3.org/2000/09/xmldsig#');
+        $xp->registerNamespace('ds', $ds);
 
-        $firmas = iterator_to_array($xp->query('//ds:Signature'));
-        if (count($firmas) < 1) {
-            throw new \RuntimeException('re-firma: el sobre no trae firmas');
+        // 1) Cada DTE se re-firma en un documento AUTÓNOMO. El SII valida la
+        //    firma del DTE extrayéndolo del sobre: ahí los xmlns heredados del
+        //    sobre (xmlns:xsi) NO están en alcance, así que el C14N del
+        //    Documento cambia. Firmar el DTE dentro del sobre produce
+        //    "505 Firma DTE Incorrecta" aunque la firma sea consistente in
+        //    situ. (Es exactamente lo que hacía LibreDTE v2: firmaba el DTE
+        //    standalone y lo insertaba ya firmado.)
+        foreach (iterator_to_array($xp->query('//*[local-name()="DTE"]')) as $dte) {
+            $tmp = new \DOMDocument();
+            $tmp->preserveWhiteSpace = true;
+            $tmp->formatOutput = false;
+            $tmp->appendChild($tmp->importNode($dte, true));
+            $xpT = new \DOMXPath($tmp);
+            $xpT->registerNamespace('ds', $ds);
+            $sigT = $xpT->query('//ds:Signature')->item(0);
+            if ($sigT instanceof \DOMElement) {
+                self::recalcular($tmp, $xpT, $sigT, $cert);
+            }
+            $dte->parentNode->replaceChild($doc->importNode($tmp->documentElement, true), $dte);
         }
-        // Las firmas cuyo padre NO es la raíz (la del DTE) van primero; la del
-        // sobre (hija de EnvioBOLETA) al final, para que cubra a las demás.
-        usort($firmas, function ($a, $b) use ($doc) {
-            return (int) ($a->parentNode === $doc->documentElement)
-                <=> (int) ($b->parentNode === $doc->documentElement);
-        });
 
-        foreach ($firmas as $sig) {
-            self::recalcular($doc, $xp, $sig, $cert);
+        // 2) La firma del SOBRE sí se calcula EN SITU (el SII valida el sobre
+        //    tal como llega), y al final: cubre los DTE ya re-firmados.
+        $xp = new \DOMXPath($doc);
+        $xp->registerNamespace('ds', $ds);
+        $sigSobre = $xp->query('/*/ds:Signature')->item(0);
+        if (!$sigSobre instanceof \DOMElement) {
+            throw new \RuntimeException('re-firma: el sobre no trae firma propia');
         }
+        self::recalcular($doc, $xp, $sigSobre, $cert);
 
         $salida = $doc->saveXML();
         if (!is_string($salida) || $salida === '') {
@@ -138,13 +155,26 @@ final class Refirmador
         $doc->preserveWhiteSpace = true;
         $doc->formatOutput = false;
         $doc->loadXML($xml);
+        $ds = 'http://www.w3.org/2000/09/xmldsig#';
         $xp = new \DOMXPath($doc);
-        $xp->registerNamespace('ds', 'http://www.w3.org/2000/09/xmldsig#');
+        $xp->registerNamespace('ds', $ds);
 
         $salida = [];
         foreach ($xp->query('//ds:Signature/ds:SignedInfo/ds:Reference') as $ref) {
             $id = ltrim($ref->getAttribute('URI'), '#');
-            $nodo = $xp->query('//*[@ID=' . self::xq($id) . ']')->item(0);
+            $sig = $ref->parentNode->parentNode;   // Reference → SignedInfo → Signature
+            if ($sig->parentNode === $doc->documentElement) {
+                // Firma del sobre: contexto in situ.
+                $nodo = $xp->query('//*[@ID=' . self::xq($id) . ']')->item(0);
+            } else {
+                // Firma de un DTE: mismo contexto AUTÓNOMO que usa refirmar().
+                $dte = $sig->parentNode;
+                $tmp = new \DOMDocument();
+                $tmp->preserveWhiteSpace = true;
+                $tmp->appendChild($tmp->importNode($dte, true));
+                $xpT = new \DOMXPath($tmp);
+                $nodo = $xpT->query('//*[@ID=' . self::xq($id) . ']')->item(0);
+            }
             if ($nodo instanceof \DOMElement) {
                 $salida[$id] = base64_encode($nodo->C14N(false, false));
             }
