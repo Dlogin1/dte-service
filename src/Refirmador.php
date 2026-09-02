@@ -132,7 +132,9 @@ final class Refirmador
         }
 
         if (preg_match('~<DTE\b.*?</DTE>~s', $sobreXml, $m)) {
-            $d2 = self::cargar($m[0], 'debug-dte');
+            // El fragmento no trae declaración XML: sin ella loadXML asume
+            // UTF-8 y los bytes ISO-8859-1 (í, ó...) rompen el parseo.
+            $d2 = self::cargar('<?xml version="1.0" encoding="ISO-8859-1"?>' . $m[0], 'debug-dte');
             $x2 = self::xpath($d2);
             foreach ($x2->query('//ds:Signature/ds:SignedInfo/ds:Reference') as $ref) {
                 $id = ltrim($ref->getAttribute('URI'), '#');
