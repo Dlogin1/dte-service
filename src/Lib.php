@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Clari\DteService;
 
-use Derafu\Kernel\Environment;
 use Derafu\Signature\Contract\SignatureGeneratorInterface;
 use Derafu\Signature\Service\SignatureGenerator;
 use Derafu\Xml\Service\XmlDecoder;
@@ -31,15 +30,16 @@ final class Lib
 {
     public static function app(): Application
     {
-        $base = sys_get_temp_dir() . '/libredte';
-        // Mismo entorno por defecto ('dev'), sólo se cambian los directorios
-        // escribibles. context = [] (4º arg son los directorios).
-        $env = new Environment('dev', true, [], [
-            'cache' => $base . '/cache',
-            'log' => $base . '/log',
-        ]);
-
-        return Application::getInstance($env);
+        // Entorno POR DEFECTO de LibreDTE — el mismo que usan sus tests, y con el
+        // que el contenedor de dependencias expone bien sus servicios
+        // (getPackageRegistry()->getBillingPackage()->...).
+        //
+        // ANTES se redirigía la caché a /tmp porque en Vercel el disco del deploy
+        // era de SOLO LECTURA. Pero ese Environment custom compilaba el contenedor
+        // de una forma que dejaba PackageRegistryInterface INACCESIBLE ("non-
+        // existent service") y la emisión reventaba. En Render (contenedor Debian)
+        // el disco ES escribible, así que el parche ya no hace falta: default.
+        return Application::getInstance();
     }
 
     /**
