@@ -196,7 +196,7 @@ try {
     // Re-firmar con criptografía estándar: las firmas de LibreDTE dev-master no
     // validan contra el SII (RFR); ver src/Refirmador.php. Después de esto el
     // XML NO se puede modificar (ni reformatear) o la firma se invalida.
-    $xmlSobre = \Clari\DteService\Refirmador::refirmar($xmlSobre, $certificado);
+    $xmlSobre = \Clari\DteService\Refirmador::refirmar($xmlSobre, $certificado, $cafXml);
 
     // MODO DEBUG (diagnóstico del rechazo del gateway): devuelve el sobre EXACTO
     // que se subiría, aplanado igual que en el envío real, SIN llamar al SII.
@@ -229,8 +229,12 @@ try {
     // barras PDF417 de la boleta contiene exactamente esos bytes, y quien lo
     // escanee revalida la firma sobre ellos. Serializarlo de otra forma (JSON,
     // por ejemplo) produciría un timbre que no valida.
+    // Del SOBRE FINAL (re-timbrado), no de la bolsa: el FRMA del TED se
+    // recalculó en el re-firmado y el de la bolsa quedó obsoleto.
     $tedXml = null;
-    if ($xmlStr && preg_match('/<TED[^>]*>.*?<\/TED>/s', $xmlStr, $m)) {
+    if (preg_match('/<TED[^>]*>.*?<\/TED>/s', $xmlSobre, $m)) {
+        $tedXml = $m[0];
+    } elseif ($xmlStr && preg_match('/<TED[^>]*>.*?<\/TED>/s', $xmlStr, $m)) {
         $tedXml = $m[0];
     }
 

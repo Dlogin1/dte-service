@@ -27,7 +27,7 @@ use Derafu\Certificate\Contract\CertificateInterface;
  */
 final class Refirmador
 {
-    public static function refirmar(string $xml, CertificateInterface $cert): string
+    public static function refirmar(string $xml, CertificateInterface $cert, ?string $cafXml = null): string
     {
         $doc = new \DOMDocument();
         $doc->preserveWhiteSpace = true;   // el DOM debe ser EXACTAMENTE lo que se envía
@@ -53,6 +53,17 @@ final class Refirmador
             $tmp->appendChild($tmp->importNode($dte, true));
             $xpT = new \DOMXPath($tmp);
             $xpT->registerNamespace('ds', $ds);
+
+            // 1a) Re-timbrar el TED con la clave privada del CAF: el FRMA que
+            //     genera LibreDTE dev-master NO valida contra la clave pública
+            //     del CAF (verificado localmente) → 505 Firma DTE Incorrecta.
+            //     Se aplana el TED (forma canónica del timbre) y se firma el
+            //     <DD> LITERAL en ISO-8859-1, ANTES de la firma xmldsig del
+            //     DTE para que el digest cubra el TED corregido.
+            if ($cafXml !== null) {
+                self::retimbrar($tmp, $xpT, $cafXml);
+            }
+
             $sigT = $xpT->query('//ds:Signature')->item(0);
             if ($sigT instanceof \DOMElement) {
                 self::recalcular($tmp, $xpT, $sigT, $cert);
@@ -116,6 +127,70 @@ final class Refirmador
         if (openssl_verify($si->C14N(false, false), $firma, $cert->getPublicKey(), OPENSSL_ALGO_SHA1) !== 1) {
             throw new \RuntimeException('re-firma: la autoverificación falló');
         }
+    }
+
+    /**
+     * Re-timbra el TED del DTE (documento autónomo $tmp): aplana el TED
+     * (quita nodos de espacios entre sus etiquetas), firma el <DD> literal en
+     * ISO-8859-1 con la clave privada del CAF (RSASK) y reemplaza el FRMA.
+     */
+    private static function retimbrar(\DOMDocument $tmp, \DOMXPath $xpT, string $cafXml): void
+    {
+        $ted = $xpT->query('//*[local-name()="TED"]')->item(0);
+        if (!$ted instanceof \DOMElement) {
+            return;   // sin TED no hay nada que timbrar (no debería pasar en boleta)
+        }
+
+        if (!preg_match('~<RSASK>(.*?)</RSASK>~s', $cafXml, $m)) {
+            throw new \RuntimeException('re-timbre: el CAF no trae RSASK (clave privada)');
+        }
+        $clave = trim($m[1]);
+
+        // Aplanar el TED: eliminar nodos de texto SOLO-espacios (la indentación
+        // que mete la serialización); el contenido real queda intacto.
+        $quitar = [];
+        $walker = function (\DOMNode $n) use (&$walker, &$quitar) {
+            foreach ($n->childNodes as $h) {
+                if ($h instanceof \DOMText && trim($h->nodeValue) === '') {
+                    $quitar[] = $h;
+                } elseif ($h->hasChildNodes()) {
+                    $walker($h);
+                }
+            }
+        };
+        $walker($ted);
+        foreach ($quitar as $n) {
+            $n->parentNode->removeChild($n);
+        }
+
+        // El FRMA se firma sobre los bytes LITERALES del <DD> tal como quedan
+        // en el documento (ISO-8859-1), sin declaraciones xmlns agregadas: por
+        // eso se extrae de la serialización completa y no con saveXML($nodo).
+        $serial = $tmp->saveXML();
+        if (!mb_check_encoding($serial, 'UTF-8')) {
+            // saveXML respeta el encoding del documento; si ya es ISO-8859-1
+            // se usa tal cual.
+            $iso = $serial;
+        } else {
+            $iso = mb_convert_encoding($serial, 'ISO-8859-1', 'UTF-8');
+        }
+        if (!preg_match('~<DD>.*?</DD>~s', $iso, $mdd)) {
+            throw new \RuntimeException('re-timbre: no se encontró el <DD> del TED');
+        }
+
+        $firma = '';
+        if (!openssl_sign($mdd[0], $firma, $clave, OPENSSL_ALGO_SHA1)) {
+            throw new \RuntimeException('re-timbre: openssl_sign falló: ' . openssl_error_string());
+        }
+
+        $frma = $xpT->query('.//*[local-name()="FRMA"]', $ted)->item(0);
+        if (!$frma instanceof \DOMElement) {
+            throw new \RuntimeException('re-timbre: el TED no trae FRMA');
+        }
+        while ($frma->firstChild) {
+            $frma->removeChild($frma->firstChild);
+        }
+        $frma->appendChild($tmp->createTextNode(base64_encode($firma)));
     }
 
     private static function reemplazarTexto(
