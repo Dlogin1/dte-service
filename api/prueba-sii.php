@@ -47,6 +47,18 @@ try {
     salir(503, ['error' => $e->getMessage()]);
 }
 
+// Modo diagnóstico: ?ver=token devuelve un TOKEN de sesión del SII vigente
+// (~1 h), para poder probar la SUBIDA del sobre directo con curl desde afuera
+// sin pasar por este servicio (aislar si el rechazo es por nuestro multipart).
+// Token-protegido como todo el endpoint; solo ambiente de certificación.
+if (($_GET['ver'] ?? '') === 'token') {
+    try {
+        salir(200, ['ambiente' => $ambiente, 'token_sii' => Sii::token()]);
+    } catch (\Throwable $e) {
+        salir(502, ['ambiente' => $ambiente, 'error' => $e->getMessage()]);
+    }
+}
+
 // Modo diagnóstico: ?ver=xml devuelve el XML firmado que se enviaría al SII, sin
 // canjearlo, para inspeccionar el formato de la firma (solo datos públicos).
 if (($_GET['ver'] ?? '') === 'xml') {
