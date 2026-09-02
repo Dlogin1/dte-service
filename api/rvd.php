@@ -89,7 +89,7 @@ try {
 
     $emisor = (new EmisorFactory())->create([
         'rut' => $emisorDatos['RUTEmisor'],
-        'razon_social' => $emisorDatos['RznSocEmisor'],
+        'razon_social' => $emisorDatos['RznSoc'],
         'autorizacion_dte' => [
             'fecha_resolucion' => Emisor::fechaResolucion(),
             'numero_resolucion' => Emisor::numeroResolucion(),

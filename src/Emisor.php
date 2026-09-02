@@ -16,14 +16,21 @@ namespace Clari\DteService;
 final class Emisor
 {
     /**
-     * @return array{RUTEmisor:string,RznSocEmisor:string,GiroEmisor:string,DirOrigen:string,CmnaOrigen:string}
+     * OJO con los NOMBRES de las claves: el normalizador de LibreDTE espera las
+     * CANÓNICAS ('RznSoc', 'GiroEmis') y él las traduce a las de la boleta
+     * ('RznSocEmisor', 'GiroEmisor') al armar el XML. Si se le pasan las de la
+     * boleta directamente las IGNORA y rellena con los datos de fantasía de su
+     * FakeEmisorProvider ("SASCO SpA") — nos pasó: salió una boleta con nuestro
+     * RUT y la razón social de otra empresa.
+     *
+     * @return array{RUTEmisor:string,RznSoc:string,GiroEmis:string,DirOrigen:string,CmnaOrigen:string}
      */
     public static function datos(): array
     {
         $req = [
             'RUTEmisor' => 'EMISOR_RUT',              // 76.543.210-K → 76543210-K
-            'RznSocEmisor' => 'EMISOR_RAZON_SOCIAL',
-            'GiroEmisor' => 'EMISOR_GIRO',
+            'RznSoc' => 'EMISOR_RAZON_SOCIAL',
+            'GiroEmis' => 'EMISOR_GIRO',
             'DirOrigen' => 'EMISOR_DIRECCION',
             'CmnaOrigen' => 'EMISOR_COMUNA',
         ];

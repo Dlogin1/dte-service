@@ -137,12 +137,15 @@ try {
         'Detalle' => $detalle,
     ];
 
-    // Referencia opcional. En el set de pruebas cada boleta referencia su caso:
-    // TpoDocRef='SET', RazonRef='CASO-N'. LibreDTE quita FchRef en boletas.
+    // Referencia opcional. OJO: la Referencia de la BOLETA (EnvioBOLETA_v11.xsd)
+    // NO es la de la factura — solo admite NroLinRef + CodRef + RazonRef (+
+    // CodVndor/CodCaja). TpoDocRef/FolioRef no existen en este esquema y el
+    // gateway del SII rechaza el envío con SCH-00001 "Invalid Schema Name".
+    // En el set de pruebas: CodRef='SET', RazonRef='CASO-N'.
     if (is_array($in['referencia'] ?? null) && trim((string) ($in['referencia']['razon'] ?? '')) !== '') {
         $datos['Referencia'] = [[
-            'TpoDocRef' => trim((string) ($in['referencia']['tipo'] ?? 'SET')),
-            'FolioRef' => (string) ($in['referencia']['folio'] ?? $folio),
+            'NroLinRef' => 1,
+            'CodRef' => trim((string) ($in['referencia']['tipo'] ?? 'SET')),
             'RazonRef' => trim((string) $in['referencia']['razon']),
         ]];
     }
