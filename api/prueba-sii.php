@@ -83,6 +83,17 @@ if ($pk === false) {
     $sha1['sha256'] = @openssl_sign('x', $f, $pk, OPENSSL_ALGO_SHA256) ? 'OK' : ('FALLA: ' . openssl_error_string());
     $sha1['ok'] = ($sha1['sha1'] === 'OK');
 }
+// El TIMBRE del TED se firma con la llave del CAF, que el SII entrega de 512
+// BITS. OpenSSL 3.x a security level ≥1 rechaza firmar con RSA < 1024 bits →
+// "No fue posible timbrar los datos" aunque SHA1 con 2048 bits funcione. Este
+// test lo aísla.
+$pk512 = @openssl_pkey_new(['private_key_bits' => 512, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+if ($pk512 === false) {
+    $sha1['rsa512'] = 'no se pudo generar llave 512: ' . openssl_error_string();
+} else {
+    $f = null;
+    $sha1['rsa512'] = @openssl_sign('x', $f, $pk512, OPENSSL_ALGO_SHA1) ? 'OK' : ('FALLA: ' . openssl_error_string());
+}
 
 try {
     // token() hace semilla + firma con el certificado + canje por token.
