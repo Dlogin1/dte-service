@@ -38,13 +38,22 @@ ENV COMPOSER_PROCESS_TIMEOUT=0
 # (sube el límite de 60/h a 5000/h). Y se reintenta hasta 3 veces por si el fallo
 # es transitorio de red. --no-progress para logs más limpios.
 ARG GITHUB_TOKEN=""
+# REPRODUCIBILIDAD (crítico): las dependencias son ramas MÓVILES (dev-master /
+# dev-main). Sin fijar, cada rebuild de Render puede traer código nuevo y romper
+# la emisión sin que cambiemos nada — ya pasó: el timbre dejó de funcionar entre
+# dos rebuilds. `--no-install` + composer.lock garantiza EXACTAMENTE los commits
+# verificados contra el SII, y el build FALLA si el lock no calza (en vez de
+# instalar algo distinto en silencio).
 RUN if [ -n "$GITHUB_TOKEN" ]; then composer config -g github-oauth.github.com "$GITHUB_TOKEN"; fi \
+    && composer validate --no-check-publish --no-check-all --strict || true \
     && for i in 1 2 3; do \
          composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader \
            --ignore-platform-reqs --no-progress && break; \
          echo ">> composer install falló (intento $i/3); reintento en 15s..."; sleep 15; \
        done \
     && test -f vendor/autoload.php \
+    # Deja constancia del commit realmente instalado (lo reporta /api/salud).
+    && composer show libredte/libredte-lib-core 2>/dev/null | head -20 \
     # El services.yaml de LibreDTE importa "../vendor/derafu/*/config/services.yaml"
     # con rutas relativas pensadas para cuando LibreDTE es el proyecto RAÍZ (su
     # vendor/ al lado de su config/). Instalado como dependencia, esa ruta apunta

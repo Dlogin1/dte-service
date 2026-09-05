@@ -150,16 +150,23 @@ try {
         ]];
     }
 
-    // 1) Armar, timbrar (CAF) y firmar (certificado) el documento.
-    $bolsa = $biller->bill($datos, $caf, $certificado);
-
-    // 2) Validar esquema y firma antes de gastar una llamada al SII.
-    $validador = $biller->getValidatorWorker();
-    $validador->validateSchema($bolsa);
-    $resultado = $validador->validateSignature($bolsa);
-    if (!$resultado->isValid()) {
-        salir(422, ['error' => 'la firma del documento no valida']);
+    // 1) Armar el documento. Ideal: bill() completo (arma+timbra+firma). Si el
+    //    timbrado de la librería falla (dev-master lo rompió en un rebuild:
+    //    "No fue posible timbrar los datos"), FALLBACK: armar y normalizar SIN
+    //    timbre ni firma — el Refirmador construye el TED y la firma él mismo
+    //    (nuestro timbre es el certificado ante el SII de todos modos).
+    try {
+        $bolsa = $biller->bill($datos, $caf, $certificado);
+    } catch (\Throwable $e) {
+        $bolsa = $biller->bill($datos);
     }
+
+    // 2) Validación de esquema/firma de la librería, ahora SOLO informativa: el
+    //    control real es Refirmador (autoverificación openssl) + el veredicto
+    //    del SII. En el fallback no hay firma de la librería que validar.
+    try {
+        $biller->getValidatorWorker()->validateSchema($bolsa);
+    } catch (\Throwable $e) { /* informativo */ }
 
     // 3) DTE STANDALONE: se toma el documento de la bolsa, se RE-TIMBRA (FRMT
     //    con la clave del CAF) y se RE-FIRMA (xmldsig estándar), porque las

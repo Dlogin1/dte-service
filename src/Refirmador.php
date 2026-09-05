@@ -81,11 +81,20 @@ final class Refirmador
             }
         }
 
-        // 1) Re-timbrar: FRMT = firma del <DD> literal con la clave del CAF.
+        // 1) TIMBRE PROPIO. No dependemos del timbrado de LibreDTE: su rama
+        //    dev-master cambió y dejó de timbrar ("No fue posible timbrar los
+        //    datos"), tumbando la emisión sin que cambiáramos código. Además su
+        //    FRMT nunca validó contra el SII (reparo 510). Si el documento no
+        //    trae TED, lo construimos acá según la norma; si lo trae, se
+        //    re-timbra igual. En ambos casos el FRMT lo firmamos nosotros.
         if (!preg_match('~<RSASK>(.*?)</RSASK>~s', $cafXml, $m)) {
             throw new \RuntimeException('timbre: el CAF no trae RSASK');
         }
         $claveCaf = trim($m[1]);
+
+        if ($xp->query('//*[local-name()="TED"]')->length === 0) {
+            self::construirTed($doc, $xp, $cafXml);
+        }
 
         $serial = self::iso($doc->saveXML());
         if (!preg_match('~<DD>.*?</DD>~s', $serial, $mdd)) {
@@ -108,7 +117,20 @@ final class Refirmador
         self::texto($doc, $frmt, base64_encode($firmaTed));
 
         // 2) Re-firmar la firma xmldsig del Documento (cubre el FRMT nuevo).
+        //    Si la librería no firmó (fallback sin certificado), se garantiza el
+        //    ID del Documento y se inserta el esqueleto de firma nuestro.
+        $documento = $xp->query('//*[local-name()="Documento"]')->item(0);
+        if ($documento instanceof \DOMElement && $documento->getAttribute('ID') === '') {
+            $folioId = trim((string) ($xp->query('//*[local-name()="Folio"]')->item(0)->textContent ?? ''));
+            $documento->setAttribute('ID', 'R' . preg_replace('~[^0-9Kk]~', '', $xp->query('//*[local-name()="RUTEmisor"]')->item(0)->textContent ?? '') . 'T39F' . $folioId);
+        }
         $sig = $xp->query('//ds:Signature')->item(0);
+        if (!$sig instanceof \DOMElement && $documento instanceof \DOMElement) {
+            $frag = $doc->createDocumentFragment();
+            $frag->appendXML(self::esqueletoFirma($cert, $documento->getAttribute('ID')));
+            $documento->parentNode->appendChild($frag);
+            $sig = $xp->query('//ds:Signature')->item(0);
+        }
         if (!$sig instanceof \DOMElement) {
             throw new \RuntimeException('firma DTE: el DTE no trae Signature');
         }
@@ -122,6 +144,71 @@ final class Refirmador
         self::sinFixtures($salida);
 
         return trim((string) preg_replace('~^<\?xml[^>]*\?>\s*~', '', $salida));
+    }
+
+    /**
+     * Construye el TED (timbre) del documento desde cero, según la norma del SII.
+     *
+     * Estructura: <TED version="1.0"><DD>…datos del documento…<CAF/>…<TSTED/></DD>
+     * <FRMT algoritmo="SHA1withRSA"/></TED>, insertado como último hijo de
+     * <Documento> (antes de TmstFirma, que se agrega después si falta).
+     * El FRMT lo firma el llamador (firmarDte) sobre el <DD> aplanado.
+     *
+     * El CAF va VERBATIM (bytes exactos del archivo del SII): su <FRMA> es la
+     * firma del SII sobre esos bytes y el emisor no puede reformatearlo.
+     */
+    private static function construirTed(\DOMDocument $doc, \DOMXPath $xp, string $cafXml): void
+    {
+        $g = static function (string $tag) use ($xp): string {
+            $n = $xp->query('//*[local-name()="' . $tag . '"]')->item(0);
+            return $n ? trim($n->textContent) : '';
+        };
+
+        $items = $xp->query('//*[local-name()="Detalle"]/*[local-name()="NmbItem"]');
+        $it1 = $items->length ? trim($items->item(0)->textContent) : '';
+
+        if (!preg_match('~<CAF version=.*?</CAF>~s', $cafXml, $mc)) {
+            throw new \RuntimeException('timbre: el CAF no trae bloque <CAF>');
+        }
+
+        // El DD se arma como STRING (el CAF debe entrar verbatim, sin que el DOM
+        // lo reserialice) y luego se importa como fragmento.
+        $dd = '<DD>'
+            . '<RE>' . $g('RUTEmisor') . '</RE>'
+            . '<TD>' . $g('TipoDTE') . '</TD>'
+            . '<F>' . $g('Folio') . '</F>'
+            . '<FE>' . $g('FchEmis') . '</FE>'
+            . '<RR>' . $g('RUTRecep') . '</RR>'
+            . '<RSR>' . self::esc($g('RznSocRecep')) . '</RSR>'
+            . '<MNT>' . $g('MntTotal') . '</MNT>'
+            . '<IT1>' . self::esc($it1) . '</IT1>'
+            . $mc[0]
+            . '<TSTED>' . date('Y-m-d\TH:i:s') . '</TSTED>'
+            . '</DD>';
+        $ted = '<TED version="1.0">' . $dd . '<FRMT algoritmo="SHA1withRSA"></FRMT></TED>';
+
+        $documento = $xp->query('//*[local-name()="Documento"]')->item(0);
+        if (!$documento instanceof \DOMElement) {
+            throw new \RuntimeException('timbre: no se encontró <Documento>');
+        }
+
+        $frag = $doc->createDocumentFragment();
+        if (!@$frag->appendXML($ted)) {
+            throw new \RuntimeException('timbre: no se pudo construir el TED');
+        }
+        $documento->appendChild($frag);
+
+        // TmstFirma (obligatorio, va después del TED) si la librería no lo puso.
+        if ($xp->query('//*[local-name()="TmstFirma"]')->length === 0) {
+            $ts = $doc->createElement('TmstFirma', date('Y-m-d\TH:i:s'));
+            $documento->appendChild($ts);
+        }
+    }
+
+    /** Escapa texto para insertarlo en el XML del TED armado como string. */
+    private static function esc(string $s): string
+    {
+        return htmlspecialchars($s, ENT_XML1 | ENT_QUOTES, 'ISO-8859-1');
     }
 
     /** Aborta si el XML contiene marcas conocidas de datos de fantasía de LibreDTE. */

@@ -99,7 +99,13 @@ try {
             ]];
         }
 
-        $bolsa = $biller->bill($datos, $caf, $certificado);
+        // bill() completo; si el timbrado de la librería falla, fallback a armar
+        // sin timbre/firma (Refirmador los construye). Ver api/emitir.php.
+        try {
+            $bolsa = $biller->bill($datos, $caf, $certificado);
+        } catch (\Throwable $e) {
+            $bolsa = $biller->bill($datos);
+        }
         $dteXml = $bolsa->getXmlDocument()->setEncoding('ISO-8859-1')->saveXml();
         $fragmentos[] = Refirmador::firmarDte($dteXml, $certificado, $cafXml);
 
