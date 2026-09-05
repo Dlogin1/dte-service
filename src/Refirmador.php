@@ -90,7 +90,10 @@ final class Refirmador
         if (!preg_match('~<RSASK>(.*?)</RSASK>~s', $cafXml, $m)) {
             throw new \RuntimeException('timbre: el CAF no trae RSASK');
         }
-        $claveCaf = trim($m[1]);
+        $claveCaf = self::pemCanonico($m[1]);
+        if (openssl_pkey_get_private($claveCaf) === false) {
+            throw new \RuntimeException('timbre: la llave del CAF no decodifica: ' . openssl_error_string());
+        }
 
         if ($xp->query('//*[local-name()="TED"]')->length === 0) {
             self::construirTed($doc, $xp, $cafXml);
@@ -209,6 +212,26 @@ final class Refirmador
     private static function esc(string $s): string
     {
         return htmlspecialchars($s, ENT_XML1 | ENT_QUOTES, 'ISO-8859-1');
+    }
+
+    /**
+     * Reconstruye un PEM en forma CANÓNICA (cabecera + base64 a 64 columnas con
+     * \n + pie). El RSASK viene incrustado en el XML del CAF y puede traer CRLF
+     * o espacios que el decodificador de OpenSSL 3 nuevo rechaza con
+     * "DECODER routines::unsupported" (OpenSSL viejo lo toleraba; un rebuild del
+     * contenedor rompió el timbre por esto).
+     */
+    private static function pemCanonico(string $pem): string
+    {
+        if (!preg_match('~-----BEGIN ([A-Z0-9 ]+)-----(.*?)-----END \1-----~s', $pem, $m)) {
+            throw new \RuntimeException('timbre: RSASK sin estructura PEM');
+        }
+        $tipo = $m[1];
+        $b64 = preg_replace('~\s+~', '', $m[2]);
+        if ($b64 === '' || base64_decode($b64, true) === false) {
+            throw new \RuntimeException('timbre: base64 del RSASK inválido');
+        }
+        return "-----BEGIN $tipo-----\n" . chunk_split($b64, 64, "\n") . "-----END $tipo-----\n";
     }
 
     /** Aborta si el XML contiene marcas conocidas de datos de fantasía de LibreDTE. */
