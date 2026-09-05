@@ -66,7 +66,8 @@ try {
         $detalle = [];
         foreach ((array) ($d['detalle'] ?? []) as $it) {
             $linea = [
-                'NmbItem' => trim((string) ($it['nombre'] ?? '')),
+                // iso1: el SII rechaza caracteres fuera de ISO-8859-1 (LPX-00217).
+                'NmbItem' => Refirmador::iso1(trim((string) ($it['nombre'] ?? ''))),
                 'QtyItem' => (float) ($it['cantidad'] ?? 1),
                 'PrcItem' => (float) ($it['precio'] ?? 0),
             ];

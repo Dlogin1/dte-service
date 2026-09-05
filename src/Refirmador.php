@@ -208,6 +208,31 @@ final class Refirmador
         }
     }
 
+    /**
+     * Sanea texto de entrada para el DTE: el parser del SII exige ISO-8859-1
+     * ESTRICTO y rechaza el sobre entero con "LPX-00217 invalid character" si
+     * aparece un carácter fuera de ese set (nos pasó con el guión largo U+2014
+     * de una glosa). Se translitera la puntuación "inteligente" y cualquier
+     * resto no representable se convierte o se elimina.
+     */
+    public static function iso1(string $s): string
+    {
+        $mapa = [
+            "\u{2013}" => '-', "\u{2014}" => '-', "\u{2212}" => '-',
+            "\u{2018}" => "'", "\u{2019}" => "'", "\u{201C}" => '"', "\u{201D}" => '"',
+            "\u{2026}" => '...', "\u{00A0}" => ' ', "\u{2022}" => '-',
+        ];
+        $s = strtr($s, $mapa);
+        // Resto no representable: transliterar; lo intransliterable se descarta.
+        $iso = @iconv('UTF-8', 'ISO-8859-1//TRANSLIT//IGNORE', $s);
+        if ($iso === false) {
+            $iso = @iconv('UTF-8', 'ISO-8859-1//IGNORE', $s) ?: '';
+        }
+        // De vuelta a UTF-8 (las APIs internas trabajan en UTF-8; la conversión
+        // final a ISO la hace la serialización del documento).
+        return (string) @iconv('ISO-8859-1', 'UTF-8', $iso);
+    }
+
     /** Escapa texto para insertarlo en el XML del TED armado como string. */
     private static function esc(string $s): string
     {

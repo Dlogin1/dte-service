@@ -57,7 +57,9 @@ if (!is_array($in)) {
 $folio = (int) ($in['folio'] ?? 0);
 $cafXml = (string) ($in['caf_xml'] ?? '');
 $monto = (int) ($in['monto'] ?? 0);          // TOTAL con IVA incluido (boleta)
-$glosa = trim((string) ($in['glosa'] ?? 'Servicio regsi'));
+// iso1(): el SII rechaza el sobre entero si algún texto trae caracteres fuera
+// de ISO-8859-1 (LPX-00217; nos pasó con un guión largo en la glosa).
+$glosa = \Clari\DteService\Refirmador::iso1(trim((string) ($in['glosa'] ?? 'Servicio regsi')));
 // Modo multi-ítem (set de pruebas / futura factura): arreglo `detalle`. Si no
 // viene, se usa el modo simple monto+glosa (el flujo de pago real, un ítem).
 $detalleIn = is_array($in['detalle'] ?? null) ? $in['detalle'] : [];
@@ -87,11 +89,12 @@ try {
     // Receptor: por defecto consumidor final (RUT genérico 66666666-6), que es
     // el caso de la boleta. Fase 3 (factura 33) usará datos reales de empresa.
     $r = is_array($in['receptor'] ?? null) ? $in['receptor'] : [];
+    $iso1 = static fn ($s) => \Clari\DteService\Refirmador::iso1((string) $s);
     $receptor = [
         'RUTRecep' => strtoupper((string) ($r['rut'] ?? '66666666-6')),
-        'RznSocRecep' => (string) ($r['razon_social'] ?? 'Sin RUT'),
-        'DirRecep' => (string) ($r['direccion'] ?? 'Sin dirección'),
-        'CmnaRecep' => (string) ($r['comuna'] ?? 'Santiago'),
+        'RznSocRecep' => $iso1($r['razon_social'] ?? 'Sin RUT'),
+        'DirRecep' => $iso1($r['direccion'] ?? 'Sin dirección'),
+        'CmnaRecep' => $iso1($r['comuna'] ?? 'Santiago'),
     ];
 
     // Detalle. En la boleta 39 los precios son BRUTOS (IVA incluido): LibreDTE
@@ -103,7 +106,7 @@ try {
         $detalle = [];
         foreach ($detalleIn as $it) {
             $linea = [
-                'NmbItem' => trim((string) ($it['nombre'] ?? '')),
+                'NmbItem' => $iso1(trim((string) ($it['nombre'] ?? ''))),
                 'QtyItem' => (float) ($it['cantidad'] ?? 1),
                 'PrcItem' => (float) ($it['precio'] ?? 0),
             ];
